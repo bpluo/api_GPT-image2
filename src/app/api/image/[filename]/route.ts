@@ -8,7 +8,7 @@ const imageBaseDir = path.resolve(process.cwd(), 'generated-images');
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
 
   const { filename } = await params;
@@ -39,9 +39,9 @@ export async function GET(
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error(`Error serving image ${filename}:`, error);
-    if (error.code === 'ENOENT') {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

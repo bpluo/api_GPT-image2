@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -141,7 +142,7 @@ export function EditingForm({
     setEditMaskPreviewUrl(null);
 
     if (imageFiles.length > 0 && sourceImagePreviewUrls.length > 0) {
-        const img = new Image();
+        const img = new window.Image();
         img.onload = () => {
             setEditOriginalImageSize({ width: img.width, height: img.height });
         };
@@ -477,10 +478,13 @@ export function EditingForm({
                 <div className="flex space-x-2 pt-2 overflow-x-auto">
                     {sourceImagePreviewUrls.map((url, index) => (
                         <div key={url} className="relative shrink-0">
-                            <img
+                            <Image
                                 src={url}
                                 alt={`Source preview ${index + 1}`}
-                                className="h-20 w-20 object-cover rounded border border-white/10"
+                                width={80} 
+                                height={80} 
+                                className="object-cover rounded border border-white/10"
+                                unoptimized 
                              />
                              <Button
                                 type="button"
@@ -517,10 +521,13 @@ export function EditingForm({
                 <div className="space-y-3 p-3 border border-white/20 rounded-md bg-black">
                     <p className="text-xs text-white/60">Draw on the image below to mark areas for editing (drawn areas become transparent in the mask).</p>
                     <div className="relative w-full mx-auto border border-white/10 rounded overflow-hidden" style={{ maxWidth: `min(100%, ${editOriginalImageSize.width}px)`, aspectRatio: `${editOriginalImageSize.width} / ${editOriginalImageSize.height}` }}>
-                        <img
+                        <Image
                             src={firstImagePreviewUrl}
                             alt="Image preview for masking"
+                            width={editOriginalImageSize.width} 
+                            height={editOriginalImageSize.height} 
                             className="block w-full h-auto"
+                            unoptimized 
                          />
                         <canvas
                             ref={canvasRef}
@@ -583,11 +590,14 @@ export function EditingForm({
                         <div className="pt-3 border-t border-white/10 mt-3 text-center">
                             <Label className="text-white text-sm block mb-1.5">Generated Mask Preview:</Label>
                             <div className="bg-white p-1 inline-block rounded border border-gray-300">
-                                <img
+                                <Image
                                     src={editMaskPreviewUrl}
                                     alt="Generated mask preview"
-                                    className="max-w-full h-auto block"
-                                    style={{ maxHeight: '134px' }}
+                                    width={0} 
+                                    height={134} 
+                                    className="max-w-full block"
+                                    style={{ width: 'auto', height: '134px' }} 
+                                    unoptimized 
                                 />
                             </div>
                         </div>

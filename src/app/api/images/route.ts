@@ -12,13 +12,18 @@ const outputDir = path.resolve(process.cwd(), 'generated-images');
 async function ensureOutputDirExists() {
   try {
     await fs.access(outputDir);
-  } catch (error) {
-    try {
-      await fs.mkdir(outputDir, { recursive: true });
-      console.log(`Created output directory: ${outputDir}`);
-    } catch (mkdirError) {
-      console.error(`Error creating output directory ${outputDir}:`, mkdirError);
-      throw new Error('Failed to create image output directory.'); 
+  } catch (error: unknown) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      try {
+        await fs.mkdir(outputDir, { recursive: true });
+        console.log(`Created output directory: ${outputDir}`);
+      } catch (mkdirError) {
+        console.error(`Error creating output directory ${outputDir}:`, mkdirError);
+        throw new Error('Failed to create image output directory.');
+      }
+    } else {
+      console.error(`Error accessing output directory ${outputDir}:`, error);
+      throw new Error(`Failed to access or ensure image output directory exists. Original error: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }
@@ -166,11 +171,26 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ images: savedImagesData, usage: result.usage });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in /api/images:', error);
-    
-    const errorMessage = error.message || 'An unexpected error occurred.';
-    const status = error.status || 500; 
+
+    let errorMessage = 'An unexpected error occurred.';
+    let status = 500;
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      if (typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number') {
+        status = error.status;
+      }
+    } else if (typeof error === 'object' && error !== null) {
+        if ('message' in error && typeof error.message === 'string') {
+            errorMessage = error.message;
+        }
+        if ('status' in error && typeof error.status === 'number') {
+            status = error.status;
+        }
+    }
+
     return NextResponse.json({ error: errorMessage }, { status });
   }
 }

@@ -1,7 +1,6 @@
 "use client"; 
 
 import * as React from "react";
-import { ModeToggle } from "@/components/mode-toggle";
 import { GenerationForm, type GenerationFormData } from "@/components/generation-form";
 import { EditingForm, type EditingFormData } from "@/components/editing-form";
 import { ImageOutput } from "@/components/image-output";
@@ -263,10 +262,11 @@ export default function HomePage() {
          throw new Error("API response did not contain valid image data or filenames.");
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       durationMs = Date.now() - startTime;
       console.error(`API Call Error after ${durationMs}ms:`, err);
-      setError(err.message || "An unexpected error occurred.");
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(errorMessage);
       setLatestImageBatch(null);
     } finally {
       if (durationMs === 0) durationMs = Date.now() - startTime;
@@ -339,9 +339,10 @@ export default function HomePage() {
 
       console.log(`Successfully set ${filename} in edit form.`);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error sending image to edit:", err);
-      setError(err.message || "Failed to send image to edit form.");
+      const errorMessage = err instanceof Error ? err.message : "Failed to send image to edit form.";
+      setError(errorMessage);
     } finally {
       setIsSendingToEdit(false);
     }
