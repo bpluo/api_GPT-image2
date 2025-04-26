@@ -59,6 +59,18 @@ You need an OpenAI API key to use this application.
 
     **Important:** Keep your API key secret. The `.env.local` file is included in `.gitignore` by default to prevent accidental commits.
 
+### (Optional) Use a Custom API Endpoint
+
+If you need to use an OpenAI-compatible API endpoint (e.g., a local model server or a different provider), you can specify its base URL using the `OPENAI_API_BASE_URL` environment variable in your `.env.local` file:
+
+```dotenv
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
+```
+
+If `OPENAI_API_BASE_URL` is not set, the application will default to the standard OpenAI API endpoint.
+
+
 ### 2. Install Dependencies
 
 Navigate to the project directory in your terminal and install the necessary packages:
