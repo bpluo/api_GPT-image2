@@ -43,7 +43,7 @@ Follow these steps to get the playground running locally.
 
 ### Prerequisites
 
-*   [Node.js](https://nodejs.org/) (Version 18 or later recommended)
+*   [Node.js](https://nodejs.org/) (Version 20 or later required)
 *   [npm](https://www.npmjs.com/), [yarn](https://yarnpkg.com/), [pnpm](https://pnpm.io/), or [bun](https://bun.sh/)
 
 ### 1. Set Up API Key
