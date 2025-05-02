@@ -41,7 +41,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await ensureOutputDirExists();
+    
+    let effectiveStorageMode: 'fs' | 'indexeddb';
+    const explicitMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
+    const isOnVercel = process.env.VERCEL === '1';
+
+    if (explicitMode === 'fs') {
+      effectiveStorageMode = 'fs';
+    } else if (explicitMode === 'indexeddb') {
+      effectiveStorageMode = 'indexeddb';
+    } else if (isOnVercel) {
+      
+      effectiveStorageMode = 'indexeddb';
+    } else {
+      
+      effectiveStorageMode = 'fs';
+    }
+    console.log(`Effective Image Storage Mode: ${effectiveStorageMode} (Explicit: ${explicitMode || 'unset'}, Vercel: ${isOnVercel})`);
+
+
+    
+    if (effectiveStorageMode === 'fs') {
+      await ensureOutputDirExists();
+    }
 
     const formData = await request.formData();
     const mode = formData.get('mode') as 'generate' | 'edit' | null;
@@ -143,6 +165,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+
     const savedImagesData = await Promise.all(
       result.data.map(async (imageData, index) => {
         if (!imageData.b64_json) {
@@ -154,21 +177,31 @@ export async function POST(request: NextRequest) {
         
         const fileExtension = formData.get('output_format') as string || 'png';
         const filename = `${timestamp}-${index}.${fileExtension}`;
-        const filepath = path.join(outputDir, filename);
+        
+        if (effectiveStorageMode === 'fs') {
+          const filepath = path.join(outputDir, filename);
+          console.log(`Attempting to save image to: ${filepath}`);
+          await fs.writeFile(filepath, buffer);
+          console.log(`Successfully saved image: ${filename}`);
+        } else {
+          
+        }
 
-        console.log(`Attempting to save image to: ${filepath}`);
-        await fs.writeFile(filepath, buffer);
-        console.log(`Successfully saved image: ${filename}`);
-
-        return {
-          b64_json: imageData.b64_json,
-          path: `/generated-images/${filename}`, 
+        
+        const imageResult: { filename: string; b64_json: string; path?: string } = {
           filename: filename,
+          b64_json: imageData.b64_json, 
         };
+
+        if (effectiveStorageMode === 'fs') {
+          imageResult.path = `/generated-images/${filename}`; 
+        }
+
+        return imageResult;
       })
     );
 
-    console.log('All images processed and saved.');
+    console.log(`All images processed. Mode: ${effectiveStorageMode}`);
     
     return NextResponse.json({ images: savedImagesData, usage: result.usage });
 

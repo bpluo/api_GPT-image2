@@ -1,6 +1,8 @@
 "use client"; 
 
 import * as React from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, type ImageRecord } from "@/lib/db";
 import { GenerationForm, type GenerationFormData } from "@/components/generation-form";
 import { EditingForm, type EditingFormData } from "@/components/editing-form";
 import { ImageOutput } from "@/components/image-output";
@@ -15,6 +17,7 @@ type HistoryImage = {
 export type HistoryMetadata = {
   timestamp: number; 
   images: HistoryImage[];
+  storageModeUsed?: 'fs' | 'indexeddb';
   durationMs: number;
   quality: GenerationFormData['quality'];
   background: GenerationFormData['background'];
@@ -32,6 +35,26 @@ type DrawnPoint = {
 
 const MAX_EDIT_IMAGES = 10;
 
+const explicitModeClient = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
+
+const vercelEnvClient = process.env.NEXT_PUBLIC_VERCEL_ENV;
+const isOnVercelClient = vercelEnvClient === 'production' || vercelEnvClient === 'preview';
+
+let effectiveStorageModeClient: 'fs' | 'indexeddb';
+
+if (explicitModeClient === 'fs') {
+  effectiveStorageModeClient = 'fs';
+} else if (explicitModeClient === 'indexeddb') {
+  effectiveStorageModeClient = 'indexeddb';
+} else if (isOnVercelClient) {
+
+  effectiveStorageModeClient = 'indexeddb';
+} else {
+
+  effectiveStorageModeClient = 'fs';
+}
+console.log(`Client Effective Storage Mode: ${effectiveStorageModeClient} (Explicit: ${explicitModeClient || 'unset'}, Vercel Env: ${vercelEnvClient || 'N/A'})`);
+
 export default function HomePage() {
   const [mode, setMode] = React.useState<"generate" | "edit">("generate");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -41,8 +64,15 @@ export default function HomePage() {
   const [imageOutputView, setImageOutputView] = React.useState<'grid' | number>('grid');
   const [history, setHistory] = React.useState<HistoryMetadata[]>([]); 
   const [isInitialLoad, setIsInitialLoad] = React.useState(true);
+  const [blobUrlCache, setBlobUrlCache] = React.useState<Record<string, string>>({});
 
-  
+  const allDbImages = useLiveQuery<ImageRecord[] | undefined>(
+    () => effectiveStorageModeClient === 'indexeddb'
+      ? db.images.toArray()
+      : Promise.resolve(undefined),
+    [effectiveStorageModeClient]
+  );
+
   const [editImageFiles, setEditImageFiles] = React.useState<File[]>([]);
   const [editSourceImagePreviewUrls, setEditSourceImagePreviewUrls] = React.useState<string[]>([]);
   const [editPrompt, setEditPrompt] = React.useState("");
@@ -57,7 +87,7 @@ export default function HomePage() {
   const [editDrawnPoints, setEditDrawnPoints] = React.useState<DrawnPoint[]>([]);
   const [editMaskPreviewUrl, setEditMaskPreviewUrl] = React.useState<string | null>(null);
 
-  
+
   const [genPrompt, setGenPrompt] = React.useState("");
   const [genN, setGenN] = React.useState([1]);
   const [genSize, setGenSize] = React.useState<GenerationFormData['size']>("auto");
@@ -67,6 +97,44 @@ export default function HomePage() {
   const [genBackground, setGenBackground] = React.useState<GenerationFormData['background']>("auto");
   const [genModeration, setGenModeration] = React.useState<GenerationFormData['moderation']>("auto");
 
+  const getImageSrc = React.useCallback((filename: string): string | undefined => {
+
+    if (effectiveStorageModeClient === 'indexeddb') {
+
+      if (blobUrlCache[filename]) {
+        return blobUrlCache[filename];
+      }
+
+      const record = allDbImages?.find(img => img.filename === filename);
+      if (record?.blob) {
+
+        console.log(`Creating blob URL for ${filename} from DB.`);
+        const url = URL.createObjectURL(record.blob);
+        setBlobUrlCache(prev => ({ ...prev, [filename]: url }));
+        return url;
+      }
+
+      console.warn(`Blob not found in DB for ${filename}, falling back to FS path.`);
+      return `/api/image/${filename}`;
+    }
+
+    else {
+
+      return `/api/image/${filename}`;
+    }
+  }, [effectiveStorageModeClient, allDbImages, blobUrlCache]);
+
+  React.useEffect(() => {
+
+    return () => {
+      console.log('Revoking blob URLs:', Object.keys(blobUrlCache).length);
+      Object.values(blobUrlCache).forEach(url => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [blobUrlCache]);
   
   React.useEffect(() => {
     return () => {
@@ -74,7 +142,6 @@ export default function HomePage() {
     };
   }, [editSourceImagePreviewUrls]);
 
-  // Load history from localStorage on mount
   React.useEffect(() => {
     try {
       const storedHistory = localStorage.getItem("openaiImageHistory");
@@ -106,6 +173,11 @@ export default function HomePage() {
     }
   }, [history, isInitialLoad]);
 
+  React.useEffect(() => {
+    return () => {
+      editSourceImagePreviewUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [editSourceImagePreviewUrls]);
   
   React.useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -134,7 +206,7 @@ export default function HomePage() {
             setEditSourceImagePreviewUrls(prevUrls => [...prevUrls, previewUrl]);
 
             console.log("Pasted image added:", file.name);
-            
+
             break;
           }
         }
@@ -149,7 +221,7 @@ export default function HomePage() {
     return () => {
       window.removeEventListener('paste', handlePaste);
     };
-  }, [mode, editImageFiles.length, setEditImageFiles, setEditSourceImagePreviewUrls]);
+  }, [mode, editImageFiles.length]);
 
 
   
@@ -238,6 +310,7 @@ export default function HomePage() {
         const newHistoryEntry: HistoryMetadata = {
             timestamp: batchTimestamp,
             images: result.images.map((img: { filename: string }) => ({ filename: img.filename })),
+            storageModeUsed: effectiveStorageModeClient,
             durationMs: durationMs,
             quality: historyQuality,
             background: historyBackground,
@@ -247,13 +320,55 @@ export default function HomePage() {
             costDetails: costDetails
         };
 
-        const newImageBatch = result.images.map((img: { filename: string }) => ({
-            path: `/api/image/${img.filename}`,
-            filename: img.filename
-        }));
+        let newImageBatchPromises: Promise<{ path: string; filename: string } | null>[] = [];
+        if (effectiveStorageModeClient === 'indexeddb') {
+          console.log('Processing images for IndexedDB storage...');
+          newImageBatchPromises = result.images.map(async (img: { filename: string; b64_json?: string }) => {
+            if (img.b64_json) {
+              try {
 
-        setLatestImageBatch(newImageBatch);
-        setImageOutputView(newImageBatch.length > 1 ? 'grid' : 0);
+                const byteCharacters = atob(img.b64_json);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                  byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+
+                const blob = new Blob([byteArray], { type: 'image/png' });
+
+
+                await db.images.put({ filename: img.filename, blob });
+                console.log(`Saved ${img.filename} to IndexedDB.`);
+
+                const blobUrl = URL.createObjectURL(blob);
+                setBlobUrlCache(prev => ({ ...prev, [img.filename]: blobUrl }));
+
+                return { filename: img.filename, path: blobUrl };
+
+              } catch (dbError) {
+                console.error(`Error saving blob ${img.filename} to IndexedDB:`, dbError);
+                setError(`Failed to save image ${img.filename} to local database.`);
+                return null;
+              }
+            } else {
+              console.warn(`Image ${img.filename} missing b64_json in indexeddb mode.`);
+              return null;
+            }
+          });
+        } else {
+
+          newImageBatchPromises = result.images
+            .filter((img: { path?: string }) => !!img.path)
+            .map((img: { filename: string; path: string }) => Promise.resolve({
+              path: img.path,
+              filename: img.filename
+            }));
+        }
+
+        const processedImages = (await Promise.all(newImageBatchPromises)).filter(Boolean) as { path: string; filename: string }[];
+
+        setLatestImageBatch(processedImages);
+        setImageOutputView(processedImages.length > 1 ? 'grid' : 0);
 
         setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
 
@@ -275,25 +390,56 @@ export default function HomePage() {
   };
 
   const handleHistorySelect = (item: HistoryMetadata) => {
-    const selectedBatch = item.images.map(img => ({
-        path: `/api/image/${img.filename}`,
-        filename: img.filename
-    }));
-    setLatestImageBatch(selectedBatch);
+    console.log(`Selecting history item from ${new Date(item.timestamp).toISOString()}`);
+    const selectedBatch = item.images
+      .map(img => {
+        const path = getImageSrc(img.filename);
+        if (path) {
+          return { path, filename: img.filename };
+        } else {
+          console.warn(`Could not get image source for history item: ${img.filename}`);
+          return null;
+        }
+      })
+      .filter(Boolean) as { path: string; filename: string }[];
+
+    if (selectedBatch.length !== item.images.length) {
+      setError("Some images from this history entry could not be loaded (they might have been cleared from the local database).");
+    } else {
+      setError(null);
+    }
+
+    setLatestImageBatch(selectedBatch.length > 0 ? selectedBatch : null);
     setImageOutputView(selectedBatch.length > 1 ? 'grid' : 0);
     setError(null);
   };
 
-  const handleClearHistory = () => {
-    if (window.confirm("Are you sure you want to clear the entire image history? This cannot be undone.")) {
-        setHistory([]);
-        setLatestImageBatch(null);
-        setImageOutputView('grid');
-        try {
-            localStorage.removeItem("openaiImageHistory");
-        } catch (e) {
-            console.error("Failed to remove history from localStorage:", e);
+  const handleClearHistory = async () => {
+    const confirmationMessage = effectiveStorageModeClient === 'indexeddb'
+      ? "Are you sure you want to clear the entire image history? In IndexedDB mode, this will also permanently delete all stored images. This cannot be undone."
+      : "Are you sure you want to clear the entire image history? This cannot be undone.";
+
+    if (window.confirm(confirmationMessage)) {
+      setHistory([]);
+      setLatestImageBatch(null);
+      setImageOutputView('grid');
+      setError(null);
+
+      try {
+
+        localStorage.removeItem("openaiImageHistory");
+        console.log("Cleared history metadata from localStorage.");
+
+        if (effectiveStorageModeClient === 'indexeddb') {
+          await db.images.clear();
+          console.log("Cleared images from IndexedDB.");
+
+          setBlobUrlCache({});
         }
+      } catch (e) {
+        console.error("Failed during history clearing:", e);
+        setError(`Failed to clear history: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
   };
 
@@ -304,26 +450,50 @@ export default function HomePage() {
 
     const alreadyExists = editImageFiles.some(file => file.name === filename);
     if (mode === 'edit' && alreadyExists) {
-        console.log(`Image ${filename} already in edit list.`);
-        setIsSendingToEdit(false);
-        return;
+      console.log(`Image ${filename} already in edit list.`);
+      setIsSendingToEdit(false);
+      return;
     }
 
     if (mode === 'edit' && editImageFiles.length >= MAX_EDIT_IMAGES) {
-        setError(`Cannot add more than ${MAX_EDIT_IMAGES} images to the edit form.`);
-        setIsSendingToEdit(false);
-        return;
+      setError(`Cannot add more than ${MAX_EDIT_IMAGES} images to the edit form.`);
+      setIsSendingToEdit(false);
+      return;
     }
 
     console.log(`Sending image ${filename} to edit...`);
 
     try {
-      const response = await fetch(`/api/image/${filename}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`);
+      let blob: Blob | undefined;
+      let mimeType: string = 'image/png';
+
+      if (effectiveStorageModeClient === 'indexeddb') {
+        console.log(`Fetching blob ${filename} from IndexedDB...`);
+
+        const record = allDbImages?.find(img => img.filename === filename);
+        if (record?.blob) {
+          blob = record.blob;
+          mimeType = blob.type || mimeType;
+          console.log(`Found blob ${filename} in IndexedDB.`);
+        } else {
+          throw new Error(`Image ${filename} not found in local database.`);
+        }
+      } else {
+
+        console.log(`Fetching image ${filename} from API...`);
+        const response = await fetch(`/api/image/${filename}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.statusText}`);
+        }
+        blob = await response.blob();
+        mimeType = response.headers.get('Content-Type') || mimeType;
+        console.log(`Fetched image ${filename} from API.`);
       }
-      const blob = await response.blob();
-      const mimeType = response.headers.get('Content-Type') || 'image/png';
+
+      if (!blob) {
+        throw new Error(`Could not retrieve image data for ${filename}.`);
+      }
+
 
       const newFile = new File([blob], filename, { type: mimeType });
       const newPreviewUrl = URL.createObjectURL(blob);
@@ -439,6 +609,7 @@ export default function HomePage() {
             history={history}
             onSelectImage={handleHistorySelect}
             onClearHistory={handleClearHistory}
+            getImageSrc={getImageSrc}
           />
         </div>
       </div>
