@@ -1,45 +1,38 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from "@/components/theme-provider";
-import "./globals.css";
+import './globals.css';
+import { ThemeProvider } from '@/components/theme-provider';
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+    variable: '--font-geist-sans',
+    subsets: ['latin']
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+    variable: '--font-geist-mono',
+    subsets: ['latin']
 });
 
 export const metadata: Metadata = {
-  title: "gpt-image-1 playground",
-  description: "Generate and edit images using OpenAI's gpt-image-1 model.",
-  icons: {
-    icon: "/favicon.svg",
-  },
+    title: 'gpt-image-1 playground',
+    description: "Generate and edit images using OpenAI's gpt-image-1 model.",
+    icons: {
+        icon: '/favicon.svg'
+    }
 };
 
 export default function RootLayout({
-  children,
+    children
 }: Readonly<{
-  children: React.ReactNode;
+    children: React.ReactNode;
 }>) {
-  return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
-      </body>
-    </html>
-  );
+    return (
+        <html lang='en' suppressHydrationWarning>
+            <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+                <ThemeProvider attribute='class' defaultTheme='dark' enableSystem={false} disableTransitionOnChange>
+                    {children}
+                </ThemeProvider>
+            </body>
+        </html>
+    );
 }
