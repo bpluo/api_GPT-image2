@@ -122,7 +122,7 @@ export default function HomePage() {
 
       return `/api/image/${filename}`;
     }
-  }, [effectiveStorageModeClient, allDbImages, blobUrlCache]);
+  }, [allDbImages, blobUrlCache]);
 
   React.useEffect(() => {
 
