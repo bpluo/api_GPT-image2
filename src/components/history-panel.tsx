@@ -136,7 +136,7 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {[...history].reverse().map((item) => { 
+            {[...history].map((item) => { 
               const firstImage = item.images?.[0]; 
               const imageCount = item.images?.length ?? 0;
               const isMultiImage = imageCount > 1;
