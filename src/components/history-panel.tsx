@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogClose
 } from "@/components/ui/dialog";
-import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon } from "lucide-react";
+import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon, HardDrive, Database } from "lucide-react";
 import type { HistoryMetadata } from '@/app/page'; 
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ type HistoryPanelProps = {
   history: HistoryMetadata[];
   onSelectImage: (item: HistoryMetadata) => void; 
   onClearHistory: () => void;
+  getImageSrc: (filename: string) => string | undefined; 
 };
 
 const formatDuration = (ms: number): string => {
@@ -38,7 +39,7 @@ const calculateCost = (value: number, rate: number): string => {
 }
 
 
-export function HistoryPanel({ history, onSelectImage, onClearHistory }: HistoryPanelProps) {
+export function HistoryPanel({ history, onSelectImage, onClearHistory, getImageSrc }: HistoryPanelProps) {
   const [openPromptDialogTimestamp, setOpenPromptDialogTimestamp] = React.useState<number | null>(null);
   const [openCostDialogTimestamp, setOpenCostDialogTimestamp] = React.useState<number | null>(null);
   const [isTotalCostDialogOpen, setIsTotalCostDialogOpen] = React.useState(false);
@@ -136,11 +137,13 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {[...history].reverse().map((item) => { 
+            {[...history].map((item) => { 
               const firstImage = item.images?.[0]; 
               const imageCount = item.images?.length ?? 0;
               const isMultiImage = imageCount > 1;
               const itemKey = item.timestamp; 
+              const thumbnailUrl = firstImage ? getImageSrc(firstImage.filename) : undefined; 
+              const storageModeUsed = item.storageModeUsed || 'fs'; 
 
               return (
                 <div key={itemKey} className="flex flex-col">
@@ -150,9 +153,9 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
                       className="aspect-square rounded-t-md overflow-hidden border border-white/20 group-hover:border-white/40 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-white transition-all duration-150 block w-full relative"
                       aria-label={`View image batch from ${new Date(item.timestamp).toLocaleString()}`}
                     >
-                      {firstImage ? (
+                      {thumbnailUrl ? (
                         <Image
-                          src={`/api/image/${firstImage.filename}`}
+                          src={thumbnailUrl}
                           alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
                           width={150}
                           height={150}
@@ -175,6 +178,14 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory }: History
                            {imageCount}
                         </div>
                       )}
+                      <div className="absolute bottom-1 left-1 bg-neutral-900/80 border border-white/10 text-white/70 text-[11px] px-1 py-0.5 rounded-full flex items-center gap-1 pointer-events-none z-10">
+                        {storageModeUsed === 'fs' ? (
+                          <HardDrive size={12} className="text-neutral-400" />
+                        ) : (
+                          <Database size={12} className="text-blue-400" />
+                        )}
+                        <span>{storageModeUsed === 'fs' ? 'file' : 'db'}</span>
+                      </div>
                     </button>
                     {item.costDetails && (
                        <Dialog open={openCostDialogTimestamp === itemKey} onOpenChange={(isOpen) => !isOpen && setOpenCostDialogTimestamp(null)}>
