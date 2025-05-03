@@ -105,9 +105,9 @@ export default function HomePage() {
 
                 const record = allDbImages?.find((img) => img.filename === filename);
                 if (record?.blob) {
-                    console.log(`Creating blob URL for ${filename} from DB.`);
+                    console.log(`Creating blob URL for ${filename} from DB (will not cache during render).`);
                     const url = URL.createObjectURL(record.blob);
-                    setBlobUrlCache((prev) => ({ ...prev, [filename]: url }));
+
                     return url;
                 }
 
