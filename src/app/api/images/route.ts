@@ -38,7 +38,6 @@ export async function POST(request: NextRequest) {
         console.error('OPENAI_API_KEY is not set.');
         return NextResponse.json({ error: 'Server configuration error: API key not found.' }, { status: 500 });
     }
-
     try {
         let effectiveStorageMode: 'fs' | 'indexeddb';
         const explicitMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
@@ -62,6 +61,16 @@ export async function POST(request: NextRequest) {
         }
 
         const formData = await request.formData();
+        
+        // Password validation logic
+        if (process.env.APP_PASSWORD) {
+            const password = formData.get('password') as string | null;
+            if (!password || password !== process.env.APP_PASSWORD) {
+                console.error('Invalid or missing password.');
+                return NextResponse.json({ error: 'Unauthorized: Invalid password.' }, { status: 401 });
+            }
+        }
+
         const mode = formData.get('mode') as 'generate' | 'edit' | null;
         const prompt = formData.get('prompt') as string | null;
 

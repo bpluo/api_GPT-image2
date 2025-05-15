@@ -56,6 +56,7 @@ console.log(
 );
 
 export default function HomePage() {
+    const [password, setPassword] = React.useState('');
     const [mode, setMode] = React.useState<'generate' | 'edit'>('generate');
     const [isLoading, setIsLoading] = React.useState(false);
     const [isSendingToEdit, setIsSendingToEdit] = React.useState(false);
@@ -225,6 +226,7 @@ export default function HomePage() {
         setImageOutputView('grid');
 
         const apiFormData = new FormData();
+        apiFormData.append('password', password)
         apiFormData.append('mode', mode);
 
         if (mode === 'generate') {
@@ -514,6 +516,8 @@ export default function HomePage() {
                             <GenerationForm
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading}
+                                currentPassword={password}
+                                onPasswordChange={setPassword}
                                 currentMode={mode}
                                 onModeChange={setMode}
                                 prompt={genPrompt}
@@ -538,6 +542,8 @@ export default function HomePage() {
                             <EditingForm
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading || isSendingToEdit}
+                                currentPassword={password}
+                                onPasswordChange={setPassword}
                                 currentMode={mode}
                                 onModeChange={setMode}
                                 imageFiles={editImageFiles}

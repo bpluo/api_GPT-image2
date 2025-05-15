@@ -25,6 +25,7 @@ import {
 import * as React from 'react';
 
 export type GenerationFormData = {
+    password: string;
     prompt: string;
     n: number;
     size: '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
@@ -38,6 +39,8 @@ export type GenerationFormData = {
 type GenerationFormProps = {
     onSubmit: (data: GenerationFormData) => void;
     isLoading: boolean;
+    currentPassword: string;
+    onPasswordChange: React.Dispatch<React.SetStateAction<string>>;
     currentMode: 'generate' | 'edit';
     onModeChange: (mode: 'generate' | 'edit') => void;
     prompt: string;
@@ -85,6 +88,8 @@ const RadioItemWithIcon = ({
 export function GenerationForm({
     onSubmit,
     isLoading,
+    currentPassword,
+    onPasswordChange,
     currentMode,
     onModeChange,
     prompt,
@@ -136,6 +141,20 @@ export function GenerationForm({
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
+                    <div className='space-y-1.5'>
+                        <Label htmlFor='password' className='text-white'>
+                            Password
+                        </Label>
+                        <Textarea
+                            id='password'
+                            placeholder='Enter your password'
+                            value={currentPassword}
+                            onChange={(e) => onPasswordChange(e.target.value)}
+                            required
+                            disabled={isLoading}
+                            className='min-h-[80px] rounded-md border border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
+                        />
+                    </div>
                     <div className='space-y-1.5'>
                         <Label htmlFor='prompt' className='text-white'>
                             Prompt
