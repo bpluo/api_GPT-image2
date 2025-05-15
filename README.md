@@ -110,6 +110,15 @@ If `OPENAI_API_BASE_URL` is not set, the application will default to the standar
 
 ---
 
+
+#### 🟡 (Optional) Enable Password Validation
+```dotenv
+APP_PASSWORD=your_password_here
+```
+
+
+---
+
 ### 2. Install Dependencies 🟢
 
 Navigate to the project directory in your terminal and install the necessary packages:
