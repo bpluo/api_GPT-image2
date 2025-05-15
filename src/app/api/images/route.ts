@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
@@ -31,6 +32,10 @@ async function ensureOutputDirExists() {
     }
 }
 
+function sha256(data: string): string {
+    return crypto.createHash('sha256').update(data).digest('hex');
+}
+
 export async function POST(request: NextRequest) {
     console.log('Received POST request to /api/images');
 
@@ -38,7 +43,6 @@ export async function POST(request: NextRequest) {
         console.error('OPENAI_API_KEY is not set.');
         return NextResponse.json({ error: 'Server configuration error: API key not found.' }, { status: 500 });
     }
-
     try {
         let effectiveStorageMode: 'fs' | 'indexeddb';
         const explicitMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
@@ -62,6 +66,20 @@ export async function POST(request: NextRequest) {
         }
 
         const formData = await request.formData();
+
+        if (process.env.APP_PASSWORD) {
+            const clientPasswordHash = formData.get('passwordHash') as string | null;
+            if (!clientPasswordHash) {
+                console.error('Missing password hash.');
+                return NextResponse.json({ error: 'Unauthorized: Missing password hash.' }, { status: 401 });
+            }
+            const serverPasswordHash = sha256(process.env.APP_PASSWORD);
+            if (clientPasswordHash !== serverPasswordHash) {
+                console.error('Invalid password hash.');
+                return NextResponse.json({ error: 'Unauthorized: Invalid password.' }, { status: 401 });
+            }
+        }
+
         const mode = formData.get('mode') as 'generate' | 'edit' | null;
         const prompt = formData.get('prompt') as string | null;
 

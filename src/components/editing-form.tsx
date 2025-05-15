@@ -22,7 +22,9 @@ import {
     Loader2,
     X,
     ScanEye,
-    UploadCloud
+    UploadCloud,
+    Lock,
+    LockOpen
 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
@@ -47,6 +49,9 @@ type EditingFormProps = {
     isLoading: boolean;
     currentMode: 'generate' | 'edit';
     onModeChange: (mode: 'generate' | 'edit') => void;
+    isPasswordRequiredByBackend: boolean | null;
+    clientPasswordHash: string | null;
+    onOpenPasswordDialog: () => void;
     imageFiles: File[];
     sourceImagePreviewUrls: string[];
     setImageFiles: React.Dispatch<React.SetStateAction<File[]>>;
@@ -105,6 +110,9 @@ export function EditingForm({
     isLoading,
     currentMode,
     onModeChange,
+    isPasswordRequiredByBackend,
+    clientPasswordHash,
+    onOpenPasswordDialog,
     imageFiles,
     sourceImagePreviewUrls,
     setImageFiles,
@@ -446,7 +454,19 @@ export function EditingForm({
         <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
             <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
                 <div>
-                    <CardTitle className='text-lg font-medium text-white'>Edit Image</CardTitle>
+                    <div className='flex items-center'>
+                        <CardTitle className='text-lg font-medium text-white py-1'>Edit Image</CardTitle>
+                        {isPasswordRequiredByBackend && (
+                            <Button
+                                variant='ghost'
+                                size='icon'
+                                onClick={onOpenPasswordDialog}
+                                className='ml-2 text-white/60 hover:text-white'
+                                aria-label='Configure Password'>
+                                {clientPasswordHash ? <Lock className='h-4 w-4' /> : <LockOpen className='h-4 w-4' />}
+                            </Button>
+                        )}
+                    </div>
                     <CardDescription className='mt-1 text-white/60'>Modify an image using gpt-image-1.</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />

@@ -46,9 +46,9 @@ A web-based playground to interact with OpenAI's `gpt-image-1` model for generat
 
 You can deploy your own instance of this playground to Vercel with one click:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alasano/gpt-image-1-playground&env=OPENAI_API_KEY,NEXT_PUBLIC_IMAGE_STORAGE_MODE&envDescription=OpenAI%20API%20Key%20is%20required.%20Set%20storage%20mode%20to%20indexeddb%20for%20Vercel%20deployments.&project-name=gpt-image-playground&repository-name=gpt-image-playground)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/alasano/gpt-image-1-playground&env=OPENAI_API_KEY,NEXT_PUBLIC_IMAGE_STORAGE_MODE,APP_PASSWORD&envDescription=OpenAI%20API%20Key%20is%20required.%20Set%20storage%20mode%20to%20indexeddb%20for%20Vercel%20deployments.&project-name=gpt-image-playground&repository-name=gpt-image-playground)
 
-You will be prompted to enter your `OPENAI_API_KEY` during the deployment setup. For Vercel deployments, it's required to set `NEXT_PUBLIC_IMAGE_STORAGE_MODE` to `indexeddb`. 
+You will be prompted to enter your `OPENAI_API_KEY` and `APP_PASSWORD` during the deployment setup. For Vercel deployments, it's required to set `NEXT_PUBLIC_IMAGE_STORAGE_MODE` to `indexeddb`. 
 
 Note: If `NEXT_PUBLIC_IMAGE_STORAGE_MODE` is not set, the application will automatically detect if it's running on Vercel (using the `VERCEL` or `NEXT_PUBLIC_VERCEL_ENV` environment variables) and default to `indexeddb` mode in that case. Otherwise (e.g., running locally), it defaults to `fs` mode. You can always explicitly set the variable to `fs` or `indexeddb` to override this automatic behavior.
 
@@ -107,6 +107,18 @@ OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
 ```
 
 If `OPENAI_API_BASE_URL` is not set, the application will default to the standard OpenAI API endpoint.
+
+---
+
+
+#### 🟡 (Optional) Enable Password Validation
+```dotenv
+APP_PASSWORD=your_password_here
+```
+When `APP_PASSWORD` is set, the frontend will prompt you for a password to authenticate requests.
+<p align="center">
+  <img src="./readme-images/password-dialog.jpg" alt="Password Dialog" width="460"/>
+</p>
 
 ---
 
