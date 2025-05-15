@@ -22,7 +22,9 @@ import {
     Loader2,
     X,
     ScanEye,
-    UploadCloud
+    UploadCloud,
+    Lock,
+    LockOpen
 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
@@ -34,7 +36,6 @@ type DrawnPoint = {
 };
 
 export type EditingFormData = {
-    password: string;
     prompt: string;
     n: number;
     size: '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
@@ -46,10 +47,11 @@ export type EditingFormData = {
 type EditingFormProps = {
     onSubmit: (data: EditingFormData) => void;
     isLoading: boolean;
-    currentPassword: string;
-    onPasswordChange: React.Dispatch<React.SetStateAction<string>>;
     currentMode: 'generate' | 'edit';
     onModeChange: (mode: 'generate' | 'edit') => void;
+    isPasswordRequiredByBackend: boolean | null;
+    clientPasswordHash: string | null;
+    onOpenPasswordDialog: () => void;
     imageFiles: File[];
     sourceImagePreviewUrls: string[];
     setImageFiles: React.Dispatch<React.SetStateAction<File[]>>;
@@ -106,10 +108,11 @@ const RadioItemWithIcon = ({
 export function EditingForm({
     onSubmit,
     isLoading,
-    currentPassword,
-    onPasswordChange,
     currentMode,
     onModeChange,
+    isPasswordRequiredByBackend,
+    clientPasswordHash,
+    onOpenPasswordDialog,
     imageFiles,
     sourceImagePreviewUrls,
     setImageFiles,
@@ -431,7 +434,6 @@ export function EditingForm({
         }
 
         const formData: EditingFormData = {
-            password: currentPassword,
             prompt: editPrompt,
             n: editN[0],
             size: editSize,
@@ -452,28 +454,25 @@ export function EditingForm({
         <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
             <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
                 <div>
-                    <CardTitle className='text-lg font-medium text-white'>Edit Image</CardTitle>
+                    <div className='flex items-center'>
+                        <CardTitle className='text-lg font-medium text-white py-1'>Edit Image</CardTitle>
+                        {isPasswordRequiredByBackend && (
+                            <Button
+                                variant='ghost'
+                                size='icon'
+                                onClick={onOpenPasswordDialog}
+                                className='ml-2 text-white/60 hover:text-white'
+                                aria-label='Configure Password'>
+                                {clientPasswordHash ? <Lock className='h-4 w-4' /> : <LockOpen className='h-4 w-4' />}
+                            </Button>
+                        )}
+                    </div>
                     <CardDescription className='mt-1 text-white/60'>Modify an image using gpt-image-1.</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
-                    <div className='space-y-1.5'>
-                        <Label htmlFor='password' className='text-white'>
-                            Password
-                        </Label>
-                        <Textarea
-                            id='password'
-                            placeholder='Enter your password'
-                            value={currentPassword}
-                            onChange={(e) => onPasswordChange(e.target.value)}
-                            required
-                            disabled={isLoading}
-                            className='min-h-[80px] rounded-md border border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
-                        />
-                    </div>
-
                     <div className='space-y-1.5'>
                         <Label htmlFor='edit-prompt' className='text-white'>
                             Prompt

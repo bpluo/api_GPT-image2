@@ -115,7 +115,10 @@ If `OPENAI_API_BASE_URL` is not set, the application will default to the standar
 ```dotenv
 APP_PASSWORD=your_password_here
 ```
-
+When `APP_PASSWORD` is set, the frontend will prompt you for a password to authenticate requests.
+<p align="center">
+  <img src="./readme-images/password-dialog.jpg" alt="Password Dialog" width="460"/>
+</p>
 
 ---
 
