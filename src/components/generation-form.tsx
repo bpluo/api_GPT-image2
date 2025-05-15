@@ -114,6 +114,7 @@ export function GenerationForm({
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         const formData: GenerationFormData = {
+            password: currentPassword,
             prompt,
             n: n[0],
             size,

@@ -431,6 +431,7 @@ export function EditingForm({
         }
 
         const formData: EditingFormData = {
+            password: currentPassword,
             prompt: editPrompt,
             n: editN[0],
             size: editSize,
