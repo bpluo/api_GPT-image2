@@ -26,6 +26,7 @@ export type HistoryMetadata = {
     prompt: string;
     mode: 'generate' | 'edit';
     costDetails: CostDetails | null;
+    output_format?: GenerationFormData['output_format'];
 };
 
 type DrawnPoint = {
@@ -55,6 +56,13 @@ if (explicitModeClient === 'fs') {
 console.log(
     `Client Effective Storage Mode: ${effectiveStorageModeClient} (Explicit: ${explicitModeClient || 'unset'}, Vercel Env: ${vercelEnvClient || 'N/A'})`
 );
+
+type ApiImageResponseItem = {
+    filename: string;
+    b64_json?: string;
+    output_format: string;
+    path?: string;
+};
 
 export default function HomePage() {
     const [mode, setMode] = React.useState<'generate' | 'edit'>('generate');
@@ -278,6 +286,13 @@ export default function HomePage() {
         setIsPasswordDialogOpen(true);
     };
 
+    const getMimeTypeFromFormat = (format: string): string => {
+        if (format === 'jpeg') return 'image/jpeg';
+        if (format === 'webp') return 'image/webp';
+        
+        return 'image/png';
+    };
+
     const handleApiCall = async (formData: GenerationFormData | EditingFormData) => {
         const startTime = Date.now();
         let durationMs = 0;
@@ -359,17 +374,20 @@ export default function HomePage() {
                 let historyQuality: GenerationFormData['quality'] = 'auto';
                 let historyBackground: GenerationFormData['background'] = 'auto';
                 let historyModeration: GenerationFormData['moderation'] = 'auto';
+                let historyOutputFormat: GenerationFormData['output_format'] = 'png';
                 let historyPrompt: string = '';
 
                 if (mode === 'generate') {
                     historyQuality = genQuality;
                     historyBackground = genBackground;
                     historyModeration = genModeration;
+                    historyOutputFormat = genOutputFormat;
                     historyPrompt = genPrompt;
                 } else {
                     historyQuality = editQuality;
                     historyBackground = 'auto';
                     historyModeration = 'auto';
+                    historyOutputFormat = 'png';
                     historyPrompt = editPrompt;
                 }
 
@@ -384,6 +402,7 @@ export default function HomePage() {
                     quality: historyQuality,
                     background: historyBackground,
                     moderation: historyModeration,
+                    output_format: historyOutputFormat,
                     prompt: historyPrompt,
                     mode: mode,
                     costDetails: costDetails
@@ -392,7 +411,7 @@ export default function HomePage() {
                 let newImageBatchPromises: Promise<{ path: string; filename: string } | null>[] = [];
                 if (effectiveStorageModeClient === 'indexeddb') {
                     console.log('Processing images for IndexedDB storage...');
-                    newImageBatchPromises = result.images.map(async (img: { filename: string; b64_json?: string }) => {
+                    newImageBatchPromises = result.images.map(async (img: ApiImageResponseItem) => {
                         if (img.b64_json) {
                             try {
                                 const byteCharacters = atob(img.b64_json);
@@ -402,10 +421,11 @@ export default function HomePage() {
                                 }
                                 const byteArray = new Uint8Array(byteNumbers);
 
-                                const blob = new Blob([byteArray], { type: 'image/png' });
+                                const actualMimeType = getMimeTypeFromFormat(img.output_format);
+                                const blob = new Blob([byteArray], { type: actualMimeType });
 
                                 await db.images.put({ filename: img.filename, blob });
-                                console.log(`Saved ${img.filename} to IndexedDB.`);
+                                console.log(`Saved ${img.filename} to IndexedDB with type ${actualMimeType}.`);
 
                                 const blobUrl = URL.createObjectURL(blob);
                                 setBlobUrlCache((prev) => ({ ...prev, [img.filename]: blobUrl }));
@@ -423,10 +443,10 @@ export default function HomePage() {
                     });
                 } else {
                     newImageBatchPromises = result.images
-                        .filter((img: { path?: string }) => !!img.path)
-                        .map((img: { filename: string; path: string }) =>
+                        .filter((img: ApiImageResponseItem) => !!img.path)
+                        .map((img: ApiImageResponseItem) =>
                             Promise.resolve({
-                                path: img.path,
+                                path: img.path!,
                                 filename: img.filename
                             })
                         );

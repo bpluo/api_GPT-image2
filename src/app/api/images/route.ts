@@ -192,9 +192,10 @@ export async function POST(request: NextRequest) {
                 } else {
                 }
 
-                const imageResult: { filename: string; b64_json: string; path?: string } = {
+                const imageResult: { filename: string; b64_json: string; path?: string; output_format: string } = {
                     filename: filename,
-                    b64_json: imageData.b64_json
+                    b64_json: imageData.b64_json,
+                    output_format: fileExtension
                 };
 
                 if (effectiveStorageMode === 'fs') {
