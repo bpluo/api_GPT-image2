@@ -167,9 +167,17 @@ export function HistoryPanel({
                             const imageCount = item.images?.length ?? 0;
                             const isMultiImage = imageCount > 1;
                             const itemKey = item.timestamp;
-                            const thumbnailUrl = firstImage ? getImageSrc(firstImage.filename) : undefined;
-                            const storageModeUsed = item.storageModeUsed || 'fs';
+                            const originalStorageMode = item.storageModeUsed || 'fs';
                             const outputFormat = item.output_format || 'png';
+
+                            let thumbnailUrl: string | undefined;
+                            if (firstImage) {
+                                if (originalStorageMode === 'indexeddb') {
+                                    thumbnailUrl = getImageSrc(firstImage.filename);
+                                } else {
+                                    thumbnailUrl = `/api/image/${firstImage.filename}`;
+                                }
+                            }
 
                             return (
                                 <div key={itemKey} className='flex flex-col'>
@@ -212,12 +220,12 @@ export function HistoryPanel({
                                             )}
                                             <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1'>
                                                 <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
-                                                    {storageModeUsed === 'fs' ? (
+                                                    {originalStorageMode === 'fs' ? (
                                                         <HardDrive size={12} className='text-neutral-400' />
                                                     ) : (
                                                         <Database size={12} className='text-blue-400' />
                                                     )}
-                                                    <span>{storageModeUsed === 'fs' ? 'file' : 'db'}</span>
+                                                    <span>{originalStorageMode === 'fs' ? 'file' : 'db'}</span>
                                                 </div>
                                                 {item.output_format && (
                                                     <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
@@ -412,7 +420,7 @@ export function HistoryPanel({
                                                             className='bg-white dark:!bg-white border-neutral-400 dark:border-neutral-500 data-[state=checked]:bg-white data-[state=checked]:text-black data-[state=checked]:border-neutral-700'
                                                         />
                                                         <label htmlFor={`dont-ask-${item.timestamp}`} className="text-sm font-medium leading-none text-neutral-300 peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                                            Don't ask me again
+                                                            Don&apos;t ask me again
                                                         </label>
                                                     </div>
                                                     <DialogFooter className='gap-2 sm:justify-end'>

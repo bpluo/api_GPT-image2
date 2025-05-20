@@ -83,10 +83,7 @@ export default function HomePage() {
     const [itemToDeleteConfirm, setItemToDeleteConfirm] = React.useState<HistoryMetadata | null>(null);
     const [dialogCheckboxStateSkipConfirm, setDialogCheckboxStateSkipConfirm] = React.useState<boolean>(false);
 
-    const allDbImages = useLiveQuery<ImageRecord[] | undefined>(
-        () => (effectiveStorageModeClient === 'indexeddb' ? db.images.toArray() : Promise.resolve(undefined)),
-        [effectiveStorageModeClient]
-    );
+    const allDbImages = useLiveQuery<ImageRecord[] | undefined>(() => db.images.toArray(), []);
 
     const [editImageFiles, setEditImageFiles] = React.useState<File[]>([]);
     const [editSourceImagePreviewUrls, setEditSourceImagePreviewUrls] = React.useState<string[]>([]);
@@ -115,23 +112,18 @@ export default function HomePage() {
 
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {
-            if (effectiveStorageModeClient === 'indexeddb') {
-                if (blobUrlCache[filename]) {
-                    return blobUrlCache[filename];
-                }
-
-                const record = allDbImages?.find((img) => img.filename === filename);
-                if (record?.blob) {
-                    const url = URL.createObjectURL(record.blob);
-
-                    return url;
-                }
-
-                console.warn(`Blob not found in DB for ${filename} (expected in IndexedDB). Returning undefined.`);
-                return undefined;
-            } else {
-                return `/api/image/${filename}`;
+            if (blobUrlCache[filename]) {
+                return blobUrlCache[filename];
             }
+
+            const record = allDbImages?.find((img) => img.filename === filename);
+            if (record?.blob) {
+                const url = URL.createObjectURL(record.blob);
+
+                return url;
+            }
+
+            return undefined;
         },
         [allDbImages, blobUrlCache]
     );
@@ -223,7 +215,6 @@ export default function HomePage() {
         localStorage.setItem('imageGenSkipDeleteConfirm', String(skipDeleteConfirmation));
     }, [skipDeleteConfirmation]);
 
-
     React.useEffect(() => {
         const handlePaste = (event: ClipboardEvent) => {
             if (mode !== 'edit' || !event.clipboardData) {
@@ -305,7 +296,7 @@ export default function HomePage() {
     const getMimeTypeFromFormat = (format: string): string => {
         if (format === 'jpeg') return 'image/jpeg';
         if (format === 'webp') return 'image/webp';
-        
+
         return 'image/png';
     };
 
@@ -494,30 +485,44 @@ export default function HomePage() {
     };
 
     const handleHistorySelect = (item: HistoryMetadata) => {
-        console.log(`Selecting history item from ${new Date(item.timestamp).toISOString()}`);
-        const selectedBatch = item.images
-            .map((img) => {
-                const path = getImageSrc(img.filename);
-                if (path) {
-                    return { path, filename: img.filename };
-                } else {
-                    console.warn(`Could not get image source for history item: ${img.filename}`);
-                    return null;
-                }
-            })
-            .filter(Boolean) as { path: string; filename: string }[];
+        console.log(
+            `Selecting history item from ${new Date(item.timestamp).toISOString()}, stored via: ${item.storageModeUsed}`
+        );
+        const originalStorageMode = item.storageModeUsed || 'fs';
 
-        if (selectedBatch.length !== item.images.length) {
-            setError(
-                'Some images from this history entry could not be loaded (they might have been cleared from the local database).'
-            );
-        } else {
-            setError(null);
-        }
+        const selectedBatchPromises = item.images.map(async (imgInfo) => {
+            let path: string | undefined;
+            if (originalStorageMode === 'indexeddb') {
+                path = getImageSrc(imgInfo.filename);
+            } else {
+                path = `/api/image/${imgInfo.filename}`;
+            }
 
-        setLatestImageBatch(selectedBatch.length > 0 ? selectedBatch : null);
-        setImageOutputView(selectedBatch.length > 1 ? 'grid' : 0);
-        setError(null);
+            if (path) {
+                return { path, filename: imgInfo.filename };
+            } else {
+                console.warn(
+                    `Could not get image source for history item: ${imgInfo.filename} (mode: ${originalStorageMode})`
+                );
+                setError(`Image ${imgInfo.filename} could not be loaded.`);
+                return null;
+            }
+        });
+
+        Promise.all(selectedBatchPromises).then((resolvedBatch) => {
+            const validImages = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
+
+            if (validImages.length !== item.images.length && !error) {
+                setError(
+                    'Some images from this history entry could not be loaded (they might have been cleared or are missing).'
+                );
+            } else if (validImages.length === item.images.length) {
+                setError(null);
+            }
+
+            setLatestImageBatch(validImages.length > 0 ? validImages : null);
+            setImageOutputView(validImages.length > 1 ? 'grid' : 0);
+        });
     };
 
     const handleClearHistory = async () => {
@@ -627,21 +632,21 @@ export default function HomePage() {
         setError(null); // Clear previous errors
 
         const { images: imagesInEntry, storageModeUsed, timestamp } = item;
-        const filenamesToDelete = imagesInEntry.map(img => img.filename);
+        const filenamesToDelete = imagesInEntry.map((img) => img.filename);
 
         try {
             if (storageModeUsed === 'indexeddb') {
                 console.log('Deleting from IndexedDB:', filenamesToDelete);
                 await db.images.where('filename').anyOf(filenamesToDelete).delete();
-                setBlobUrlCache(prevCache => {
+                setBlobUrlCache((prevCache) => {
                     const newCache = { ...prevCache };
-                    filenamesToDelete.forEach(fn => delete newCache[fn]);
+                    filenamesToDelete.forEach((fn) => delete newCache[fn]);
                     return newCache;
                 });
                 console.log('Successfully deleted from IndexedDB and cleared blob cache.');
             } else if (storageModeUsed === 'fs') {
                 console.log('Requesting deletion from filesystem via API:', filenamesToDelete);
-                const apiPayload: { filenames: string[], passwordHash?: string } = { filenames: filenamesToDelete };
+                const apiPayload: { filenames: string[]; passwordHash?: string } = { filenames: filenamesToDelete };
                 if (isPasswordRequiredByBackend && clientPasswordHash) {
                     apiPayload.passwordHash = clientPasswordHash;
                 }
@@ -660,8 +665,8 @@ export default function HomePage() {
                 console.log('API deletion successful:', result);
             }
 
-            setHistory(prevHistory => prevHistory.filter(h => h.timestamp !== timestamp));
-            if (latestImageBatch && latestImageBatch.some(img => filenamesToDelete.includes(img.filename))) {
+            setHistory((prevHistory) => prevHistory.filter((h) => h.timestamp !== timestamp));
+            if (latestImageBatch && latestImageBatch.some((img) => filenamesToDelete.includes(img.filename))) {
                 setLatestImageBatch(null); // Clear current view if it contained deleted images
             }
         } catch (e: unknown) {
