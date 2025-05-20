@@ -14,7 +14,7 @@ import {
     DialogClose
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon, HardDrive, Database } from 'lucide-react';
+import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon, HardDrive, Database, FileImage } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
 
@@ -151,6 +151,7 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory, getImageS
                             const itemKey = item.timestamp;
                             const thumbnailUrl = firstImage ? getImageSrc(firstImage.filename) : undefined;
                             const storageModeUsed = item.storageModeUsed || 'fs';
+                            const outputFormat = item.output_format || 'png';
 
                             return (
                                 <div key={itemKey} className='flex flex-col'>
@@ -191,13 +192,21 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory, getImageS
                                                     {imageCount}
                                                 </div>
                                             )}
-                                            <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
-                                                {storageModeUsed === 'fs' ? (
-                                                    <HardDrive size={12} className='text-neutral-400' />
-                                                ) : (
-                                                    <Database size={12} className='text-blue-400' />
+                                            <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1'>
+                                                <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
+                                                    {storageModeUsed === 'fs' ? (
+                                                        <HardDrive size={12} className='text-neutral-400' />
+                                                    ) : (
+                                                        <Database size={12} className='text-blue-400' />
+                                                    )}
+                                                    <span>{storageModeUsed === 'fs' ? 'file' : 'db'}</span>
+                                                </div>
+                                                {item.output_format && (
+                                                    <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
+                                                        <FileImage size={12} className='text-neutral-400' />
+                                                        <span>{outputFormat.toUpperCase()}</span>
+                                                    </div>
                                                 )}
-                                                <span>{storageModeUsed === 'fs' ? 'file' : 'db'}</span>
                                             </div>
                                         </button>
                                         {item.costDetails && (
