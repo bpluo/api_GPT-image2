@@ -79,6 +79,9 @@ export default function HomePage() {
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordDialogContext, setPasswordDialogContext] = React.useState<'initial' | 'retry'>('initial');
     const [lastApiCallArgs, setLastApiCallArgs] = React.useState<[GenerationFormData | EditingFormData] | null>(null);
+    const [skipDeleteConfirmation, setSkipDeleteConfirmation] = React.useState<boolean>(false);
+    const [itemToDeleteConfirm, setItemToDeleteConfirm] = React.useState<HistoryMetadata | null>(null);
+    const [dialogCheckboxStateSkipConfirm, setDialogCheckboxStateSkipConfirm] = React.useState<boolean>(false);
 
     const allDbImages = useLiveQuery<ImageRecord[] | undefined>(
         () => (effectiveStorageModeClient === 'indexeddb' ? db.images.toArray() : Promise.resolve(undefined)),
@@ -119,14 +122,13 @@ export default function HomePage() {
 
                 const record = allDbImages?.find((img) => img.filename === filename);
                 if (record?.blob) {
-                    console.log(`Creating blob URL for ${filename} from DB (will not cache during render).`);
                     const url = URL.createObjectURL(record.blob);
 
                     return url;
                 }
 
-                console.warn(`Blob not found in DB for ${filename}, falling back to FS path.`);
-                return `/api/image/${filename}`;
+                console.warn(`Blob not found in DB for ${filename} (expected in IndexedDB). Returning undefined.`);
+                return undefined;
             } else {
                 return `/api/image/${filename}`;
             }
@@ -207,6 +209,20 @@ export default function HomePage() {
             editSourceImagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
         };
     }, [editSourceImagePreviewUrls]);
+
+    React.useEffect(() => {
+        const storedPref = localStorage.getItem('imageGenSkipDeleteConfirm');
+        if (storedPref === 'true') {
+            setSkipDeleteConfirmation(true);
+        } else if (storedPref === 'false') {
+            setSkipDeleteConfirmation(false);
+        }
+    }, []);
+
+    React.useEffect(() => {
+        localStorage.setItem('imageGenSkipDeleteConfirm', String(skipDeleteConfirmation));
+    }, [skipDeleteConfirmation]);
+
 
     React.useEffect(() => {
         const handlePaste = (event: ClipboardEvent) => {
@@ -605,6 +621,77 @@ export default function HomePage() {
         }
     };
 
+    const executeDeleteItem = async (item: HistoryMetadata) => {
+        if (!item) return;
+        console.log(`Executing delete for history item timestamp: ${item.timestamp}`);
+        setError(null); // Clear previous errors
+
+        const { images: imagesInEntry, storageModeUsed, timestamp } = item;
+        const filenamesToDelete = imagesInEntry.map(img => img.filename);
+
+        try {
+            if (storageModeUsed === 'indexeddb') {
+                console.log('Deleting from IndexedDB:', filenamesToDelete);
+                await db.images.where('filename').anyOf(filenamesToDelete).delete();
+                setBlobUrlCache(prevCache => {
+                    const newCache = { ...prevCache };
+                    filenamesToDelete.forEach(fn => delete newCache[fn]);
+                    return newCache;
+                });
+                console.log('Successfully deleted from IndexedDB and cleared blob cache.');
+            } else if (storageModeUsed === 'fs') {
+                console.log('Requesting deletion from filesystem via API:', filenamesToDelete);
+                const apiPayload: { filenames: string[], passwordHash?: string } = { filenames: filenamesToDelete };
+                if (isPasswordRequiredByBackend && clientPasswordHash) {
+                    apiPayload.passwordHash = clientPasswordHash;
+                }
+
+                const response = await fetch('/api/image-delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(apiPayload)
+                });
+
+                const result = await response.json();
+                if (!response.ok) {
+                    console.error('API deletion error:', result);
+                    throw new Error(result.error || `API deletion failed with status ${response.status}`);
+                }
+                console.log('API deletion successful:', result);
+            }
+
+            setHistory(prevHistory => prevHistory.filter(h => h.timestamp !== timestamp));
+            if (latestImageBatch && latestImageBatch.some(img => filenamesToDelete.includes(img.filename))) {
+                setLatestImageBatch(null); // Clear current view if it contained deleted images
+            }
+        } catch (e: unknown) {
+            console.error('Error during item deletion:', e);
+            setError(e instanceof Error ? e.message : 'An unexpected error occurred during deletion.');
+        } finally {
+            setItemToDeleteConfirm(null); // Always close dialog
+        }
+    };
+
+    const handleRequestDeleteItem = (item: HistoryMetadata) => {
+        if (!skipDeleteConfirmation) {
+            setDialogCheckboxStateSkipConfirm(skipDeleteConfirmation);
+            setItemToDeleteConfirm(item);
+        } else {
+            executeDeleteItem(item);
+        }
+    };
+
+    const handleConfirmDeletion = () => {
+        if (itemToDeleteConfirm) {
+            executeDeleteItem(itemToDeleteConfirm);
+            setSkipDeleteConfirmation(dialogCheckboxStateSkipConfirm);
+        }
+    };
+
+    const handleCancelDeletion = () => {
+        setItemToDeleteConfirm(null);
+    };
+
     return (
         <main className='flex min-h-screen flex-col items-center bg-black p-4 text-white md:p-8 lg:p-12'>
             <PasswordDialog
@@ -713,6 +800,12 @@ export default function HomePage() {
                         onSelectImage={handleHistorySelect}
                         onClearHistory={handleClearHistory}
                         getImageSrc={getImageSrc}
+                        onDeleteItemRequest={handleRequestDeleteItem}
+                        itemPendingDeleteConfirmation={itemToDeleteConfirm}
+                        onConfirmDeletion={handleConfirmDeletion}
+                        onCancelDeletion={handleCancelDeletion}
+                        deletePreferenceDialogValue={dialogCheckboxStateSkipConfirm}
+                        onDeletePreferenceDialogChange={setDialogCheckboxStateSkipConfirm}
                     />
                 </div>
             </div>

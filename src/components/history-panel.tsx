@@ -13,8 +13,9 @@ import {
     DialogFooter,
     DialogClose
 } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
-import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon, HardDrive, Database, FileImage } from 'lucide-react';
+import { Copy, Check, Layers, DollarSign, Pencil, Sparkles as SparklesIcon, HardDrive, Database, FileImage, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import * as React from 'react';
 
@@ -23,6 +24,12 @@ type HistoryPanelProps = {
     onSelectImage: (item: HistoryMetadata) => void;
     onClearHistory: () => void;
     getImageSrc: (filename: string) => string | undefined;
+    onDeleteItemRequest: (item: HistoryMetadata) => void;
+    itemPendingDeleteConfirmation: HistoryMetadata | null;
+    onConfirmDeletion: () => void;
+    onCancelDeletion: () => void;
+    deletePreferenceDialogValue: boolean;
+    onDeletePreferenceDialogChange: (isChecked: boolean) => void;
 };
 
 const formatDuration = (ms: number): string => {
@@ -37,7 +44,18 @@ const calculateCost = (value: number, rate: number): string => {
     return isNaN(cost) ? 'N/A' : cost.toFixed(4);
 };
 
-export function HistoryPanel({ history, onSelectImage, onClearHistory, getImageSrc }: HistoryPanelProps) {
+export function HistoryPanel({
+    history,
+    onSelectImage,
+    onClearHistory,
+    getImageSrc,
+    onDeleteItemRequest,
+    itemPendingDeleteConfirmation,
+    onConfirmDeletion,
+    onCancelDeletion,
+    deletePreferenceDialogValue,
+    onDeletePreferenceDialogChange
+}: HistoryPanelProps) {
     const [openPromptDialogTimestamp, setOpenPromptDialogTimestamp] = React.useState<number | null>(null);
     const [openCostDialogTimestamp, setOpenCostDialogTimestamp] = React.useState<number | null>(null);
     const [isTotalCostDialogOpen, setIsTotalCostDialogOpen] = React.useState(false);
@@ -317,53 +335,93 @@ export function HistoryPanel({ history, onSelectImage, onClearHistory, getImageS
                                         <p>
                                             <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
                                         </p>
-                                        <Dialog
-                                            open={openPromptDialogTimestamp === itemKey}
-                                            onOpenChange={(isOpen) => !isOpen && setOpenPromptDialogTimestamp(null)}>
-                                            <DialogTrigger asChild>
-                                                <Button
-                                                    variant='outline'
-                                                    size='sm'
-                                                    className='mt-1 h-6 w-full border-white/20 px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white'
-                                                    onClick={() => setOpenPromptDialogTimestamp(itemKey)}>
-                                                    Show Prompt
-                                                </Button>
-                                            </DialogTrigger>
-                                            <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[625px]'>
-                                                <DialogHeader>
-                                                    <DialogTitle className='text-white'>Prompt</DialogTitle>
-                                                    <DialogDescription className='sr-only'>
-                                                        The full prompt used to generate this image batch.
-                                                    </DialogDescription>
-                                                </DialogHeader>
-                                                <div className='max-h-[400px] overflow-y-auto rounded-md border border-neutral-600 bg-neutral-800 p-3 py-4 text-sm text-neutral-300'>
-                                                    {item.prompt || 'No prompt recorded.'}
-                                                </div>
-                                                <DialogFooter>
+                                        <div className='mt-2 flex items-center gap-1'>
+                                            <Dialog
+                                                open={openPromptDialogTimestamp === itemKey}
+                                                onOpenChange={(isOpen) => !isOpen && setOpenPromptDialogTimestamp(null)}>
+                                                <DialogTrigger asChild>
                                                     <Button
                                                         variant='outline'
                                                         size='sm'
-                                                        onClick={() => handleCopy(item.prompt, itemKey)}
-                                                        className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
-                                                        {copiedTimestamp === itemKey ? (
-                                                            <Check className='mr-2 h-4 w-4 text-green-400' />
-                                                        ) : (
-                                                            <Copy className='mr-2 h-4 w-4' />
-                                                        )}
-                                                        {copiedTimestamp === itemKey ? 'Copied!' : 'Copy'}
+                                                        className='h-6 flex-grow border-white/20 px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white'
+                                                        onClick={() => setOpenPromptDialogTimestamp(itemKey)}>
+                                                        Show Prompt
                                                     </Button>
-                                                    <DialogClose asChild>
+                                                </DialogTrigger>
+                                                <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[625px]'>
+                                                    <DialogHeader>
+                                                        <DialogTitle className='text-white'>Prompt</DialogTitle>
+                                                        <DialogDescription className='sr-only'>
+                                                            The full prompt used to generate this image batch.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className='max-h-[400px] overflow-y-auto rounded-md border border-neutral-600 bg-neutral-800 p-3 py-4 text-sm text-neutral-300'>
+                                                        {item.prompt || 'No prompt recorded.'}
+                                                    </div>
+                                                    <DialogFooter>
                                                         <Button
-                                                            type='button'
-                                                            variant='secondary'
+                                                            variant='outline'
                                                             size='sm'
-                                                            className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
-                                                            Close
+                                                            onClick={() => handleCopy(item.prompt, itemKey)}
+                                                            className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
+                                                            {copiedTimestamp === itemKey ? (
+                                                                <Check className='mr-2 h-4 w-4 text-green-400' />
+                                                            ) : (
+                                                                <Copy className='mr-2 h-4 w-4' />
+                                                            )}
+                                                            {copiedTimestamp === itemKey ? 'Copied!' : 'Copy'}
                                                         </Button>
-                                                    </DialogClose>
-                                                </DialogFooter>
-                                            </DialogContent>
-                                        </Dialog>
+                                                        <DialogClose asChild>
+                                                            <Button
+                                                                type='button'
+                                                                variant='secondary'
+                                                                size='sm'
+                                                                className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
+                                                                Close
+                                                            </Button>
+                                                        </DialogClose>
+                                                    </DialogFooter>
+                                                </DialogContent>
+                                            </Dialog>
+                                            <Dialog
+                                                open={itemPendingDeleteConfirmation?.timestamp === item.timestamp}
+                                                onOpenChange={(isOpen) => { if (!isOpen) onCancelDeletion(); }}
+                                            >
+                                                <DialogTrigger asChild>
+                                                    <Button
+                                                        className='h-6 w-6 bg-red-700/60 text-white hover:bg-red-600/60'
+                                                        onClick={(e) => { e.stopPropagation(); onDeleteItemRequest(item); }}
+                                                        aria-label='Delete history item'
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-md'>
+                                                    <DialogHeader>
+                                                        <DialogTitle className='text-white'>Confirm Deletion</DialogTitle>
+                                                        <DialogDescription className='pt-2 text-neutral-300'>
+                                                            Are you sure you want to delete this history entry?
+                                                            This will remove {item.images.length} image(s). This action cannot be undone.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className="flex items-center space-x-2 py-2">
+                                                        <Checkbox
+                                                            id={`dont-ask-${item.timestamp}`}
+                                                            checked={deletePreferenceDialogValue}
+                                                            onCheckedChange={(checked) => onDeletePreferenceDialogChange(!!checked)}
+                                                            className='bg-white dark:!bg-white border-neutral-400 dark:border-neutral-500 data-[state=checked]:bg-white data-[state=checked]:text-black data-[state=checked]:border-neutral-700'
+                                                        />
+                                                        <label htmlFor={`dont-ask-${item.timestamp}`} className="text-sm font-medium leading-none text-neutral-300 peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                                            Don't ask me again
+                                                        </label>
+                                                    </div>
+                                                    <DialogFooter className='gap-2 sm:justify-end'>
+                                                        <Button type="button" variant="outline" size="sm" onClick={onCancelDeletion} className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>Cancel</Button>
+                                                        <Button type="button" variant="destructive" size="sm" onClick={onConfirmDeletion} className='bg-red-600 text-white hover:bg-red-500'>Delete</Button>
+                                                    </DialogFooter>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </div>
                                     </div>
                                 </div>
                             );
