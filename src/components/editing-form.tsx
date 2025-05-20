@@ -455,7 +455,7 @@ export function EditingForm({
             <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
                 <div>
                     <div className='flex items-center'>
-                        <CardTitle className='text-lg font-medium text-white py-1'>Edit Image</CardTitle>
+                        <CardTitle className='py-1 text-lg font-medium text-white'>Edit Image</CardTitle>
                         {isPasswordRequiredByBackend && (
                             <Button
                                 variant='ghost'

@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
         }
         // Now read the original request body for processing
         requestBody = await request.json();
-
     } catch (e) {
         console.error('Error parsing request body for /api/image-delete:', e);
         return NextResponse.json({ error: 'Invalid request body: Must be JSON.' }, { status: 400 });
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     const { filenames } = requestBody;
 
-    if (!Array.isArray(filenames) || filenames.some(fn => typeof fn !== 'string')) {
+    if (!Array.isArray(filenames) || filenames.some((fn) => typeof fn !== 'string')) {
         return NextResponse.json({ error: 'Invalid filenames: Must be an array of strings.' }, { status: 400 });
     }
 
@@ -85,7 +84,7 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    const allSucceeded = deletionResults.every(r => r.success);
+    const allSucceeded = deletionResults.every((r) => r.success);
 
     return NextResponse.json(
         {
