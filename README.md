@@ -21,12 +21,13 @@ A web-based playground to interact with OpenAI's `gpt-image-1` model for generat
 *   **📜 Detailed History & Cost Tracking:**
     *   View a comprehensive history of all your image generations and edits.
     *   See the parameters used for each request.
-    *   Get detailed API token usage and estimated cost breakdowns ($USD) for each operation.
-    *   View the full prompt used for each history item. (hint: click the $ amount on the image)
+    *   Get detailed API token usage and estimated cost breakdowns (`$USD`) for each operation. (hint: click the `$` amount on the image)
+    *   View the full prompt used for each history item.
     *   View total historical API cost.
+    *   Delete items from history
 
 <p align="center">
-  <img src="./readme-images/history.jpg" alt="Interface" width="800"/>
+  <img src="./readme-images/history.jpg" alt="Interface" width="1306"/>
 </p>
 
 <p align="center">
