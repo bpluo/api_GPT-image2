@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
                 };
 
                 if (effectiveStorageMode === 'fs') {
-                    imageResult.path = `/generated-images/${filename}`;
+                    imageResult.path = `/api/image/${filename}`;
                 }
 
                 return imageResult;
