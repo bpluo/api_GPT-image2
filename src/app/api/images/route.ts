@@ -11,6 +11,24 @@ const openai = new OpenAI({
 
 const outputDir = path.resolve(process.cwd(), 'generated-images');
 
+// Define valid output formats for type safety
+const VALID_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
+type ValidOutputFormat = (typeof VALID_OUTPUT_FORMATS)[number];
+
+// Validate and normalize output format
+function validateOutputFormat(format: unknown): ValidOutputFormat {
+    const normalized = String(format || 'png').toLowerCase();
+
+    // Handle jpg -> jpeg normalization
+    const mapped = normalized === 'jpg' ? 'jpeg' : normalized;
+
+    if (VALID_OUTPUT_FORMATS.includes(mapped as ValidOutputFormat)) {
+        return mapped as ValidOutputFormat;
+    }
+
+    return 'png'; // default fallback
+}
+
 async function ensureOutputDirExists() {
     try {
         await fs.access(outputDir);
@@ -181,7 +199,7 @@ export async function POST(request: NextRequest) {
                 const buffer = Buffer.from(imageData.b64_json, 'base64');
                 const timestamp = Date.now();
 
-                const fileExtension = (formData.get('output_format') as string) || 'png';
+                const fileExtension = validateOutputFormat(formData.get('output_format'));
                 const filename = `${timestamp}-${index}.${fileExtension}`;
 
                 if (effectiveStorageMode === 'fs') {
