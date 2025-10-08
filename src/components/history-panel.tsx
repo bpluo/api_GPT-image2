@@ -121,11 +121,17 @@ export function HistoryPanel({
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                    <p>Pricing for gpt-image-1:</p>
+                                    <p className='font-medium'>gpt-image-1:</p>
                                     <ul className='list-disc pl-4'>
                                         <li>Text Input: $5 / 1M tokens</li>
                                         <li>Image Input: $10 / 1M tokens</li>
                                         <li>Image Output: $40 / 1M tokens</li>
+                                    </ul>
+                                    <p className='mt-2 font-medium'>gpt-image-1-mini:</p>
+                                    <ul className='list-disc pl-4'>
+                                        <li>Text Input: $2 / 1M tokens</li>
+                                        <li>Image Input: $2.50 / 1M tokens</li>
+                                        <li>Image Output: $8 / 1M tokens</li>
                                     </ul>
                                 </div>
                                 <div className='space-y-2 py-4 text-sm text-neutral-300'>
@@ -270,11 +276,21 @@ export function HistoryPanel({
                                                         </DialogDescription>
                                                     </DialogHeader>
                                                     <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                                        <p>Pricing for gpt-image-1:</p>
+                                                        <p>Pricing for {item.model || 'gpt-image-1'}:</p>
                                                         <ul className='list-disc pl-4'>
-                                                            <li>Text Input: $5 / 1M tokens</li>
-                                                            <li>Image Input: $10 / 1M tokens</li>
-                                                            <li>Image Output: $40 / 1M tokens</li>
+                                                            {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
+                                                                <>
+                                                                    <li>Text Input: $2 / 1M tokens</li>
+                                                                    <li>Image Input: $2.50 / 1M tokens</li>
+                                                                    <li>Image Output: $8 / 1M tokens</li>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <li>Text Input: $5 / 1M tokens</li>
+                                                                    <li>Image Input: $10 / 1M tokens</li>
+                                                                    <li>Image Output: $40 / 1M tokens</li>
+                                                                </>
+                                                            )}
                                                         </ul>
                                                     </div>
                                                     <div className='space-y-2 py-4 text-sm text-neutral-300'>
@@ -285,7 +301,7 @@ export function HistoryPanel({
                                                                 (~$
                                                                 {calculateCost(
                                                                     item.costDetails.text_input_tokens,
-                                                                    0.000005
+                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
                                                                 )}
                                                                 )
                                                             </span>
@@ -298,7 +314,7 @@ export function HistoryPanel({
                                                                     (~$
                                                                     {calculateCost(
                                                                         item.costDetails.image_input_tokens,
-                                                                        0.00001
+                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : 0.00001
                                                                     )}
                                                                     )
                                                                 </span>
@@ -311,7 +327,7 @@ export function HistoryPanel({
                                                                 (~$
                                                                 {calculateCost(
                                                                     item.costDetails.image_output_tokens,
-                                                                    0.00004
+                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : 0.00004
                                                                 )}
                                                                 )
                                                             </span>
@@ -344,6 +360,9 @@ export function HistoryPanel({
                                         <p title={`Generated on: ${new Date(item.timestamp).toLocaleString()}`}>
                                             <span className='font-medium text-white/80'>Time:</span>{' '}
                                             {formatDuration(item.durationMs)}
+                                        </p>
+                                        <p>
+                                            <span className='font-medium text-white/80'>Model:</span> {item.model || 'gpt-image-1'}
                                         </p>
                                         <p>
                                             <span className='font-medium text-white/80'>Quality:</span> {item.quality}

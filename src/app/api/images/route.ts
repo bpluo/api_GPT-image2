@@ -100,15 +100,15 @@ export async function POST(request: NextRequest) {
 
         const mode = formData.get('mode') as 'generate' | 'edit' | null;
         const prompt = formData.get('prompt') as string | null;
+        const model = (formData.get('model') as 'gpt-image-1' | 'gpt-image-1-mini' | null) || 'gpt-image-1';
 
-        console.log(`Mode: ${mode}, Prompt: ${prompt ? prompt.substring(0, 50) + '...' : 'N/A'}`);
+        console.log(`Mode: ${mode}, Model: ${model}, Prompt: ${prompt ? prompt.substring(0, 50) + '...' : 'N/A'}`);
 
         if (!mode || !prompt) {
             return NextResponse.json({ error: 'Missing required parameters: mode and prompt' }, { status: 400 });
         }
 
         let result: OpenAI.Images.ImagesResponse;
-        const model = 'gpt-image-1';
 
         if (mode === 'generate') {
             const n = parseInt((formData.get('n') as string) || '1', 10);

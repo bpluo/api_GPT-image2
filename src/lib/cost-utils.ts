@@ -13,16 +13,26 @@ export type CostDetails = {
     image_output_tokens: number;
 };
 
-const TEXT_INPUT_COST_PER_TOKEN = 0.000005;
-const IMAGE_INPUT_COST_PER_TOKEN = 0.00001;
-const IMAGE_OUTPUT_COST_PER_TOKEN = 0.00004;
+// Pricing for gpt-image-1
+const GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN = 0.000005; // $5.00/1M
+const GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN = 0.00001; // $10.00/1M
+const GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN = 0.00004; // $40.00/1M
+
+// Pricing for gpt-image-1-mini
+const GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN = 0.000002; // $2.00/1M
+const GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN = 0.0000025; // $2.50/1M
+const GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
 
 /**
- * Estimates the cost of a gpt-image-1 API call based on token usage.
+ * Estimates the cost of a gpt-image-1 or gpt-image-1-mini API call based on token usage.
  * @param usage - The usage object from the OpenAI API response.
+ * @param model - The model used ('gpt-image-1' or 'gpt-image-1-mini').
  * @returns CostDetails object or null if usage data is invalid.
  */
-export function calculateApiCost(usage: ApiUsage | undefined | null): CostDetails | null {
+export function calculateApiCost(
+    usage: ApiUsage | undefined | null,
+    model: 'gpt-image-1' | 'gpt-image-1-mini' = 'gpt-image-1'
+): CostDetails | null {
     if (!usage || !usage.input_tokens_details || usage.output_tokens === undefined || usage.output_tokens === null) {
         console.warn('Invalid or missing usage data for cost calculation:', usage);
         return null;
@@ -38,10 +48,21 @@ export function calculateApiCost(usage: ApiUsage | undefined | null): CostDetail
         return null;
     }
 
-    const costUSD =
-        textInT * TEXT_INPUT_COST_PER_TOKEN +
-        imgInT * IMAGE_INPUT_COST_PER_TOKEN +
-        imgOutT * IMAGE_OUTPUT_COST_PER_TOKEN;
+    // Select pricing based on model
+    const textInputCost =
+        model === 'gpt-image-1-mini'
+            ? GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN
+            : GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN;
+    const imageInputCost =
+        model === 'gpt-image-1-mini'
+            ? GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN
+            : GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN;
+    const imageOutputCost =
+        model === 'gpt-image-1-mini'
+            ? GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN
+            : GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN;
+
+    const costUSD = textInT * textInputCost + imgInT * imageInputCost + imgOutT * imageOutputCost;
 
     // Round to 4 decimal places
     const costRounded = Math.round(costUSD * 10000) / 10000;

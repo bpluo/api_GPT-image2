@@ -27,6 +27,7 @@ export type HistoryMetadata = {
     mode: 'generate' | 'edit';
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
+    model?: 'gpt-image-1' | 'gpt-image-1-mini';
 };
 
 type DrawnPoint = {
@@ -101,6 +102,7 @@ export default function HomePage() {
     const [editDrawnPoints, setEditDrawnPoints] = React.useState<DrawnPoint[]>([]);
     const [editMaskPreviewUrl, setEditMaskPreviewUrl] = React.useState<string | null>(null);
 
+    const [genModel, setGenModel] = React.useState<GenerationFormData['model']>('gpt-image-1');
     const [genPrompt, setGenPrompt] = React.useState('');
     const [genN, setGenN] = React.useState([1]);
     const [genSize, setGenSize] = React.useState<GenerationFormData['size']>('auto');
@@ -109,6 +111,8 @@ export default function HomePage() {
     const [genCompression, setGenCompression] = React.useState([100]);
     const [genBackground, setGenBackground] = React.useState<GenerationFormData['background']>('auto');
     const [genModeration, setGenModeration] = React.useState<GenerationFormData['moderation']>('auto');
+
+    const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1');
 
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {
@@ -323,6 +327,7 @@ export default function HomePage() {
 
         if (mode === 'generate') {
             const genData = formData as GenerationFormData;
+            apiFormData.append('model', genModel);
             apiFormData.append('prompt', genPrompt);
             apiFormData.append('n', genN[0].toString());
             apiFormData.append('size', genSize);
@@ -337,6 +342,7 @@ export default function HomePage() {
             apiFormData.append('background', genBackground);
             apiFormData.append('moderation', genModeration);
         } else {
+            apiFormData.append('model', editModel);
             apiFormData.append('prompt', editPrompt);
             apiFormData.append('n', editN[0].toString());
             apiFormData.append('size', editSize);
@@ -398,7 +404,8 @@ export default function HomePage() {
                     historyPrompt = editPrompt;
                 }
 
-                const costDetails = calculateApiCost(result.usage);
+                const currentModel = mode === 'generate' ? genModel : editModel;
+                const costDetails = calculateApiCost(result.usage, currentModel);
 
                 const batchTimestamp = Date.now();
                 const newHistoryEntry: HistoryMetadata = {
@@ -412,7 +419,8 @@ export default function HomePage() {
                     output_format: historyOutputFormat,
                     prompt: historyPrompt,
                     mode: mode,
-                    costDetails: costDetails
+                    costDetails: costDetails,
+                    model: currentModel
                 };
 
                 let newImageBatchPromises: Promise<{ path: string; filename: string } | null>[] = [];
@@ -722,6 +730,8 @@ export default function HomePage() {
                                 isPasswordRequiredByBackend={isPasswordRequiredByBackend}
                                 clientPasswordHash={clientPasswordHash}
                                 onOpenPasswordDialog={handleOpenPasswordDialog}
+                                model={genModel}
+                                setModel={setGenModel}
                                 prompt={genPrompt}
                                 setPrompt={setGenPrompt}
                                 n={genN}
@@ -749,6 +759,8 @@ export default function HomePage() {
                                 isPasswordRequiredByBackend={isPasswordRequiredByBackend}
                                 clientPasswordHash={clientPasswordHash}
                                 onOpenPasswordDialog={handleOpenPasswordDialog}
+                                editModel={editModel}
+                                setEditModel={setEditModel}
                                 imageFiles={editImageFiles}
                                 sourceImagePreviewUrls={editSourceImagePreviewUrls}
                                 setImageFiles={setEditImageFiles}

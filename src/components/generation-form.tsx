@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -35,6 +36,7 @@ export type GenerationFormData = {
     output_compression?: number;
     background: 'transparent' | 'opaque' | 'auto';
     moderation: 'low' | 'auto';
+    model: 'gpt-image-1' | 'gpt-image-1-mini';
 };
 
 type GenerationFormProps = {
@@ -45,6 +47,8 @@ type GenerationFormProps = {
     isPasswordRequiredByBackend: boolean | null;
     clientPasswordHash: string | null;
     onOpenPasswordDialog: () => void;
+    model: GenerationFormData['model'];
+    setModel: React.Dispatch<React.SetStateAction<GenerationFormData['model']>>;
     prompt: string;
     setPrompt: React.Dispatch<React.SetStateAction<string>>;
     n: number[];
@@ -95,6 +99,8 @@ export function GenerationForm({
     isPasswordRequiredByBackend,
     clientPasswordHash,
     onOpenPasswordDialog,
+    model,
+    setModel,
     prompt,
     setPrompt,
     n,
@@ -123,7 +129,8 @@ export function GenerationForm({
             quality,
             output_format: outputFormat,
             background,
-            moderation
+            moderation,
+            model
         };
         if (showCompression) {
             formData.output_compression = compression[0];
@@ -156,6 +163,27 @@ export function GenerationForm({
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
+                    <div className='space-y-1.5'>
+                        <Label htmlFor='model-select' className='text-white'>
+                            Model
+                        </Label>
+                        <Select value={model} onValueChange={(value) => setModel(value as GenerationFormData['model'])} disabled={isLoading}>
+                            <SelectTrigger
+                                id='model-select'
+                                className='rounded-md border border-white/20 bg-black text-white focus:border-white/50 focus:ring-white/50'>
+                                <SelectValue placeholder='Select model' />
+                            </SelectTrigger>
+                            <SelectContent className='border-white/20 bg-black text-white'>
+                                <SelectItem value='gpt-image-1' className='focus:bg-white/10'>
+                                    gpt-image-1
+                                </SelectItem>
+                                <SelectItem value='gpt-image-1-mini' className='focus:bg-white/10'>
+                                    gpt-image-1-mini
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className='space-y-1.5'>
                         <Label htmlFor='prompt' className='text-white'>
                             Prompt

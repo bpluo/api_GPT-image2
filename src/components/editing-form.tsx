@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -42,6 +43,7 @@ export type EditingFormData = {
     quality: 'low' | 'medium' | 'high' | 'auto';
     imageFiles: File[];
     maskFile: File | null;
+    model: 'gpt-image-1' | 'gpt-image-1-mini';
 };
 
 type EditingFormProps = {
@@ -52,6 +54,8 @@ type EditingFormProps = {
     isPasswordRequiredByBackend: boolean | null;
     clientPasswordHash: string | null;
     onOpenPasswordDialog: () => void;
+    editModel: EditingFormData['model'];
+    setEditModel: React.Dispatch<React.SetStateAction<EditingFormData['model']>>;
     imageFiles: File[];
     sourceImagePreviewUrls: string[];
     setImageFiles: React.Dispatch<React.SetStateAction<File[]>>;
@@ -113,6 +117,8 @@ export function EditingForm({
     isPasswordRequiredByBackend,
     clientPasswordHash,
     onOpenPasswordDialog,
+    editModel,
+    setEditModel,
     imageFiles,
     sourceImagePreviewUrls,
     setImageFiles,
@@ -439,7 +445,8 @@ export function EditingForm({
             size: editSize,
             quality: editQuality,
             imageFiles: imageFiles,
-            maskFile: editGeneratedMaskFile
+            maskFile: editGeneratedMaskFile,
+            model: editModel
         };
         onSubmit(formData);
     };
@@ -473,6 +480,27 @@ export function EditingForm({
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
+                    <div className='space-y-1.5'>
+                        <Label htmlFor='edit-model-select' className='text-white'>
+                            Model
+                        </Label>
+                        <Select value={editModel} onValueChange={(value) => setEditModel(value as EditingFormData['model'])} disabled={isLoading}>
+                            <SelectTrigger
+                                id='edit-model-select'
+                                className='rounded-md border border-white/20 bg-black text-white focus:border-white/50 focus:ring-white/50'>
+                                <SelectValue placeholder='Select model' />
+                            </SelectTrigger>
+                            <SelectContent className='border-white/20 bg-black text-white'>
+                                <SelectItem value='gpt-image-1' className='focus:bg-white/10'>
+                                    gpt-image-1
+                                </SelectItem>
+                                <SelectItem value='gpt-image-1-mini' className='focus:bg-white/10'>
+                                    gpt-image-1-mini
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     <div className='space-y-1.5'>
                         <Label htmlFor='edit-prompt' className='text-white'>
                             Prompt
