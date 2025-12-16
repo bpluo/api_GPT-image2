@@ -4,6 +4,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import path from 'path';
 
+// Streaming event types
+type StreamingEvent = {
+    type: 'partial_image' | 'completed' | 'error' | 'done';
+    index?: number;
+    partial_image_index?: number;
+    b64_json?: string;
+    filename?: string;
+    path?: string;
+    output_format?: string;
+    usage?: OpenAI.Images.ImagesResponse['usage'];
+    images?: Array<{
+        filename: string;
+        b64_json: string;
+        path?: string;
+        output_format: string;
+    }>;
+    error?: string;
+};
+
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     baseURL: process.env.OPENAI_API_BASE_URL
@@ -108,6 +127,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required parameters: mode and prompt' }, { status: 400 });
         }
 
+        // Check for streaming mode
+        const streamEnabled = formData.get('stream') === 'true';
+        const partialImagesCount = parseInt((formData.get('partial_images') as string) || '2', 10);
+
         let result: OpenAI.Images.ImagesResponse;
 
         if (mode === 'generate') {
@@ -122,7 +145,7 @@ export async function POST(request: NextRequest) {
             const moderation =
                 (formData.get('moderation') as OpenAI.Images.ImageGenerateParams['moderation']) || 'auto';
 
-            const params: OpenAI.Images.ImageGenerateParams = {
+            const baseParams = {
                 model,
                 prompt,
                 n: Math.max(1, Math.min(n || 1, 10)),
@@ -136,10 +159,126 @@ export async function POST(request: NextRequest) {
             if ((output_format === 'jpeg' || output_format === 'webp') && output_compression_str) {
                 const compression = parseInt(output_compression_str, 10);
                 if (!isNaN(compression) && compression >= 0 && compression <= 100) {
-                    params.output_compression = compression;
+                    (baseParams as OpenAI.Images.ImageGenerateParams).output_compression = compression;
                 }
             }
 
+            // Handle streaming mode for generation
+            if (streamEnabled) {
+                const actualPartialImages = Math.max(1, Math.min(partialImagesCount, 3)) as 1 | 2 | 3;
+                console.log(`[Streaming] Calling OpenAI generate with streaming. partial_images requested: ${actualPartialImages}`);
+
+                const streamParams = {
+                    ...baseParams,
+                    stream: true as const,
+                    partial_images: actualPartialImages
+                };
+
+                const stream = await openai.images.generate(streamParams);
+
+                // Create SSE response
+                const encoder = new TextEncoder();
+                const timestamp = Date.now();
+                const fileExtension = validateOutputFormat(output_format);
+
+                const readableStream = new ReadableStream({
+                    async start(controller) {
+                        try {
+                            const completedImages: Array<{
+                                filename: string;
+                                b64_json: string;
+                                path?: string;
+                                output_format: string;
+                            }> = [];
+                            let finalUsage: OpenAI.Images.ImagesResponse['usage'] | undefined;
+                            let imageIndex = 0;
+
+                            for await (const event of stream) {
+                                console.log(`[Streaming] Event received: ${event.type}`, {
+                                    partial_image_index: 'partial_image_index' in event ? event.partial_image_index : undefined,
+                                    hasB64: 'b64_json' in event ? !!event.b64_json : false
+                                });
+
+                                if (event.type === 'image_generation.partial_image') {
+                                    console.log(`[Streaming] Partial image ${event.partial_image_index} received, b64 length: ${event.b64_json?.length || 0}`);
+                                    const partialEvent: StreamingEvent = {
+                                        type: 'partial_image',
+                                        index: imageIndex,
+                                        partial_image_index: event.partial_image_index,
+                                        b64_json: event.b64_json
+                                    };
+                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(partialEvent)}\n\n`));
+                                } else if (event.type === 'image_generation.completed') {
+                                    console.log(`[Streaming] Completed image received, b64 length: ${event.b64_json?.length || 0}`);
+                                    const currentIndex = imageIndex;
+                                    const filename = `${timestamp}-${currentIndex}.${fileExtension}`;
+
+                                    // Save to filesystem if in fs mode
+                                    if (effectiveStorageMode === 'fs' && event.b64_json) {
+                                        const buffer = Buffer.from(event.b64_json, 'base64');
+                                        const filepath = path.join(outputDir, filename);
+                                        await fs.writeFile(filepath, buffer);
+                                        console.log(`Streaming: Saved image ${filename}`);
+                                    }
+
+                                    const imageData = {
+                                        filename,
+                                        b64_json: event.b64_json || '',
+                                        output_format: fileExtension,
+                                        ...(effectiveStorageMode === 'fs' ? { path: `/api/image/${filename}` } : {})
+                                    };
+                                    completedImages.push(imageData);
+
+                                    const completedEvent: StreamingEvent = {
+                                        type: 'completed',
+                                        index: currentIndex,
+                                        filename,
+                                        b64_json: event.b64_json,
+                                        path: effectiveStorageMode === 'fs' ? `/api/image/${filename}` : undefined,
+                                        output_format: fileExtension
+                                    };
+                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(completedEvent)}\n\n`));
+
+                                    imageIndex++;
+
+                                    // Capture usage from completed event if available
+                                    if ('usage' in event && event.usage) {
+                                        finalUsage = event.usage as OpenAI.Images.ImagesResponse['usage'];
+                                    }
+                                }
+                            }
+
+                            // Send final done event with all images and usage
+                            console.log(`[Streaming Generate] Stream complete. Total completed images: ${completedImages.length}`);
+                            const doneEvent: StreamingEvent = {
+                                type: 'done',
+                                images: completedImages,
+                                usage: finalUsage
+                            };
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`));
+                            controller.close();
+                        } catch (error) {
+                            console.error('Streaming error:', error);
+                            const errorEvent: StreamingEvent = {
+                                type: 'error',
+                                error: error instanceof Error ? error.message : 'Streaming error occurred'
+                            };
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+                            controller.close();
+                        }
+                    }
+                });
+
+                return new Response(readableStream, {
+                    headers: {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive'
+                    }
+                });
+            }
+
+            const params: OpenAI.Images.ImageGenerateParams = baseParams;
             console.log('Calling OpenAI generate with params:', params);
             result = await openai.images.generate(params);
         } else if (mode === 'edit') {
@@ -160,7 +299,7 @@ export async function POST(request: NextRequest) {
 
             const maskFile = formData.get('mask') as File | null;
 
-            const params: OpenAI.Images.ImageEditParams = {
+            const baseEditParams = {
                 model,
                 prompt,
                 image: imageFiles,
@@ -169,9 +308,123 @@ export async function POST(request: NextRequest) {
                 quality: quality === 'auto' ? undefined : quality
             };
 
-            if (maskFile) {
-                params.mask = maskFile;
+            // Handle streaming mode for editing
+            if (streamEnabled) {
+                console.log('Calling OpenAI edit with streaming, params:', {
+                    ...baseEditParams,
+                    stream: true,
+                    partial_images: partialImagesCount,
+                    image: `[${imageFiles.map((f) => f.name).join(', ')}]`,
+                    mask: maskFile ? maskFile.name : 'N/A'
+                });
+
+                const streamEditParams = {
+                    ...baseEditParams,
+                    stream: true as const,
+                    partial_images: Math.max(1, Math.min(partialImagesCount, 3)) as 1 | 2 | 3,
+                    ...(maskFile ? { mask: maskFile } : {})
+                };
+
+                const stream = await openai.images.edit(streamEditParams);
+
+                // Create SSE response for edit
+                const encoder = new TextEncoder();
+                const timestamp = Date.now();
+                const fileExtension = 'png'; // Edit mode always outputs PNG
+
+                const readableStream = new ReadableStream({
+                    async start(controller) {
+                        try {
+                            const completedImages: Array<{
+                                filename: string;
+                                b64_json: string;
+                                path?: string;
+                                output_format: string;
+                            }> = [];
+                            let finalUsage: OpenAI.Images.ImagesResponse['usage'] | undefined;
+                            let imageIndex = 0;
+
+                            for await (const event of stream) {
+                                if (event.type === 'image_edit.partial_image') {
+                                    const partialEvent: StreamingEvent = {
+                                        type: 'partial_image',
+                                        index: imageIndex,
+                                        partial_image_index: event.partial_image_index,
+                                        b64_json: event.b64_json
+                                    };
+                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(partialEvent)}\n\n`));
+                                } else if (event.type === 'image_edit.completed') {
+                                    const currentIndex = imageIndex;
+                                    const filename = `${timestamp}-${currentIndex}.${fileExtension}`;
+
+                                    // Save to filesystem if in fs mode
+                                    if (effectiveStorageMode === 'fs' && event.b64_json) {
+                                        const buffer = Buffer.from(event.b64_json, 'base64');
+                                        const filepath = path.join(outputDir, filename);
+                                        await fs.writeFile(filepath, buffer);
+                                        console.log(`Streaming edit: Saved image ${filename}`);
+                                    }
+
+                                    const imageData = {
+                                        filename,
+                                        b64_json: event.b64_json || '',
+                                        output_format: fileExtension,
+                                        ...(effectiveStorageMode === 'fs' ? { path: `/api/image/${filename}` } : {})
+                                    };
+                                    completedImages.push(imageData);
+
+                                    const completedEvent: StreamingEvent = {
+                                        type: 'completed',
+                                        index: currentIndex,
+                                        filename,
+                                        b64_json: event.b64_json,
+                                        path: effectiveStorageMode === 'fs' ? `/api/image/${filename}` : undefined,
+                                        output_format: fileExtension
+                                    };
+                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(completedEvent)}\n\n`));
+
+                                    imageIndex++;
+
+                                    // Capture usage from completed event if available
+                                    if ('usage' in event && event.usage) {
+                                        finalUsage = event.usage as OpenAI.Images.ImagesResponse['usage'];
+                                    }
+                                }
+                            }
+
+                            // Send final done event with all images and usage
+                            const doneEvent: StreamingEvent = {
+                                type: 'done',
+                                images: completedImages,
+                                usage: finalUsage
+                            };
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`));
+                            controller.close();
+                        } catch (error) {
+                            console.error('Streaming edit error:', error);
+                            const errorEvent: StreamingEvent = {
+                                type: 'error',
+                                error: error instanceof Error ? error.message : 'Streaming error occurred'
+                            };
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
+                            controller.close();
+                        }
+                    }
+                });
+
+                return new Response(readableStream, {
+                    headers: {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive'
+                    }
+                });
             }
+
+            const params: OpenAI.Images.ImageEditParams = {
+                ...baseEditParams,
+                ...(maskFile ? { mask: maskFile } : {})
+            };
 
             console.log('Calling OpenAI edit with params:', {
                 ...params,

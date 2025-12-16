@@ -114,6 +114,12 @@ export default function HomePage() {
 
     const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
 
+    // Streaming state (shared between generate and edit modes)
+    const [enableStreaming, setEnableStreaming] = React.useState(false);
+    const [partialImages, setPartialImages] = React.useState<1 | 2 | 3>(2);
+    // Streaming preview images (base64 data URLs for partial images during streaming)
+    const [streamingPreviewImages, setStreamingPreviewImages] = React.useState<Map<number, string>>(new Map());
+
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {
             if (blobUrlCache[filename]) {
@@ -312,6 +318,7 @@ export default function HomePage() {
         setError(null);
         setLatestImageBatch(null);
         setImageOutputView('grid');
+        setStreamingPreviewImages(new Map());
 
         const apiFormData = new FormData();
         if (isPasswordRequiredByBackend && clientPasswordHash) {
@@ -324,6 +331,12 @@ export default function HomePage() {
             return;
         }
         apiFormData.append('mode', mode);
+
+        // Add streaming parameters if enabled
+        if (enableStreaming) {
+            apiFormData.append('stream', 'true');
+            apiFormData.append('partial_images', partialImages.toString());
+        }
 
         if (mode === 'generate') {
             const genData = formData as GenerationFormData;
@@ -356,7 +369,7 @@ export default function HomePage() {
             }
         }
 
-        console.log('Sending request to /api/images with mode:', mode);
+        console.log('Sending request to /api/images with mode:', mode, 'streaming:', enableStreaming);
 
         try {
             const response = await fetch('/api/images', {
@@ -364,6 +377,179 @@ export default function HomePage() {
                 body: apiFormData
             });
 
+            // Check if response is SSE (streaming)
+            const contentType = response.headers.get('content-type');
+            if (contentType?.includes('text/event-stream')) {
+                console.log('Handling SSE streaming response...');
+
+                if (!response.body) {
+                    throw new Error('Response body is null');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // Process complete SSE events
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop() || ''; // Keep incomplete event in buffer
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.slice(6);
+                            try {
+                                const event = JSON.parse(jsonStr);
+                                console.log('SSE Event:', event.type);
+
+                                if (event.type === 'partial_image') {
+                                    // Update streaming preview with partial image
+                                    const imageIndex = event.index ?? 0;
+                                    const dataUrl = `data:image/png;base64,${event.b64_json}`;
+                                    setStreamingPreviewImages((prev) => {
+                                        const newMap = new Map(prev);
+                                        newMap.set(imageIndex, dataUrl);
+                                        return newMap;
+                                    });
+                                    console.log(`Partial image ${event.partial_image_index} for index ${imageIndex}`);
+                                } else if (event.type === 'completed') {
+                                    console.log(`Completed image ${event.index}: ${event.filename}`);
+                                } else if (event.type === 'error') {
+                                    throw new Error(event.error || 'Streaming error occurred');
+                                } else if (event.type === 'done') {
+                                    // Finalize with all completed images
+                                    durationMs = Date.now() - startTime;
+                                    console.log(`Streaming completed. Duration: ${durationMs}ms`);
+
+                                    if (event.images && event.images.length > 0) {
+                                        let historyQuality: GenerationFormData['quality'] = 'auto';
+                                        let historyBackground: GenerationFormData['background'] = 'auto';
+                                        let historyModeration: GenerationFormData['moderation'] = 'auto';
+                                        let historyOutputFormat: GenerationFormData['output_format'] = 'png';
+                                        let historyPrompt: string = '';
+
+                                        if (mode === 'generate') {
+                                            historyQuality = genQuality;
+                                            historyBackground = genBackground;
+                                            historyModeration = genModeration;
+                                            historyOutputFormat = genOutputFormat;
+                                            historyPrompt = genPrompt;
+                                        } else {
+                                            historyQuality = editQuality;
+                                            historyBackground = 'auto';
+                                            historyModeration = 'auto';
+                                            historyOutputFormat = 'png';
+                                            historyPrompt = editPrompt;
+                                        }
+
+                                        const currentModel = mode === 'generate' ? genModel : editModel;
+                                        const costDetails = calculateApiCost(event.usage, currentModel);
+
+                                        const batchTimestamp = Date.now();
+                                        const newHistoryEntry: HistoryMetadata = {
+                                            timestamp: batchTimestamp,
+                                            images: event.images.map((img: { filename: string }) => ({
+                                                filename: img.filename
+                                            })),
+                                            storageModeUsed: effectiveStorageModeClient,
+                                            durationMs: durationMs,
+                                            quality: historyQuality,
+                                            background: historyBackground,
+                                            moderation: historyModeration,
+                                            output_format: historyOutputFormat,
+                                            prompt: historyPrompt,
+                                            mode: mode,
+                                            costDetails: costDetails,
+                                            model: currentModel
+                                        };
+
+                                        let newImageBatchPromises: Promise<{ path: string; filename: string } | null>[] =
+                                            [];
+                                        if (effectiveStorageModeClient === 'indexeddb') {
+                                            console.log('Processing streaming images for IndexedDB storage...');
+                                            newImageBatchPromises = event.images.map(async (img: ApiImageResponseItem) => {
+                                                if (img.b64_json) {
+                                                    try {
+                                                        const byteCharacters = atob(img.b64_json);
+                                                        const byteNumbers = new Array(byteCharacters.length);
+                                                        for (let i = 0; i < byteCharacters.length; i++) {
+                                                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                                        }
+                                                        const byteArray = new Uint8Array(byteNumbers);
+
+                                                        const actualMimeType = getMimeTypeFromFormat(img.output_format);
+                                                        const blob = new Blob([byteArray], { type: actualMimeType });
+
+                                                        await db.images.put({ filename: img.filename, blob });
+                                                        console.log(
+                                                            `Saved ${img.filename} to IndexedDB with type ${actualMimeType}.`
+                                                        );
+
+                                                        const blobUrl = URL.createObjectURL(blob);
+                                                        setBlobUrlCache((prev) => ({
+                                                            ...prev,
+                                                            [img.filename]: blobUrl
+                                                        }));
+
+                                                        return { filename: img.filename, path: blobUrl };
+                                                    } catch (dbError) {
+                                                        console.error(
+                                                            `Error saving blob ${img.filename} to IndexedDB:`,
+                                                            dbError
+                                                        );
+                                                        setError(
+                                                            `Failed to save image ${img.filename} to local database.`
+                                                        );
+                                                        return null;
+                                                    }
+                                                } else {
+                                                    console.warn(
+                                                        `Image ${img.filename} missing b64_json in indexeddb mode.`
+                                                    );
+                                                    return null;
+                                                }
+                                            });
+                                        } else {
+                                            newImageBatchPromises = event.images
+                                                .filter((img: ApiImageResponseItem) => !!img.path)
+                                                .map((img: ApiImageResponseItem) =>
+                                                    Promise.resolve({
+                                                        path: img.path!,
+                                                        filename: img.filename
+                                                    })
+                                                );
+                                        }
+
+                                        const processedImages = (await Promise.all(newImageBatchPromises)).filter(
+                                            Boolean
+                                        ) as {
+                                            path: string;
+                                            filename: string;
+                                        }[];
+
+                                        setLatestImageBatch(processedImages);
+                                        setImageOutputView(processedImages.length > 1 ? 'grid' : 0);
+                                        setStreamingPreviewImages(new Map()); // Clear streaming previews
+
+                                        setHistory((prevHistory) => [newHistoryEntry, ...prevHistory]);
+                                    }
+                                }
+                            } catch (parseError) {
+                                console.error('Error parsing SSE event:', parseError);
+                            }
+                        }
+                    }
+                }
+
+                return; // Exit early for streaming
+            }
+
+            // Non-streaming response handling (original code)
             const result = await response.json();
 
             if (!response.ok) {
@@ -486,6 +672,7 @@ export default function HomePage() {
             const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
             setError(errorMessage);
             setLatestImageBatch(null);
+            setStreamingPreviewImages(new Map());
         } finally {
             if (durationMs === 0) durationMs = Date.now() - startTime;
             setIsLoading(false);
@@ -748,6 +935,10 @@ export default function HomePage() {
                                 setBackground={setGenBackground}
                                 moderation={genModeration}
                                 setModeration={setGenModeration}
+                                enableStreaming={enableStreaming}
+                                setEnableStreaming={setEnableStreaming}
+                                partialImages={partialImages}
+                                setPartialImages={setPartialImages}
                             />
                         </div>
                         <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
@@ -788,6 +979,10 @@ export default function HomePage() {
                                 setEditDrawnPoints={setEditDrawnPoints}
                                 editMaskPreviewUrl={editMaskPreviewUrl}
                                 setEditMaskPreviewUrl={setEditMaskPreviewUrl}
+                                enableStreaming={enableStreaming}
+                                setEnableStreaming={setEnableStreaming}
+                                partialImages={partialImages}
+                                setPartialImages={setPartialImages}
                             />
                         </div>
                     </div>
@@ -807,6 +1002,7 @@ export default function HomePage() {
                             onSendToEdit={handleSendToEdit}
                             currentMode={mode}
                             baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
+                            streamingPreviewImages={streamingPreviewImages}
                         />
                     </div>
                 </div>
