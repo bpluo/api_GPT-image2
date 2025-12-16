@@ -133,6 +133,12 @@ export function HistoryPanel({
                                         <li>Image Input: $2.50 / 1M tokens</li>
                                         <li>Image Output: $8 / 1M tokens</li>
                                     </ul>
+                                    <p className='mt-2 font-medium'>gpt-image-1.5:</p>
+                                    <ul className='list-disc pl-4'>
+                                        <li>Text Input: $5 / 1M tokens</li>
+                                        <li>Image Input: $8 / 1M tokens</li>
+                                        <li>Image Output: $32 / 1M tokens</li>
+                                    </ul>
                                 </div>
                                 <div className='space-y-2 py-4 text-sm text-neutral-300'>
                                     <div className='flex justify-between'>
@@ -284,6 +290,12 @@ export function HistoryPanel({
                                                                     <li>Image Input: $2.50 / 1M tokens</li>
                                                                     <li>Image Output: $8 / 1M tokens</li>
                                                                 </>
+                                                            ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
+                                                                <>
+                                                                    <li>Text Input: $5 / 1M tokens</li>
+                                                                    <li>Image Input: $8 / 1M tokens</li>
+                                                                    <li>Image Output: $32 / 1M tokens</li>
+                                                                </>
                                                             ) : (
                                                                 <>
                                                                     <li>Text Input: $5 / 1M tokens</li>
@@ -314,7 +326,7 @@ export function HistoryPanel({
                                                                     (~$
                                                                     {calculateCost(
                                                                         item.costDetails.image_input_tokens,
-                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : 0.00001
+                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000008 : 0.00001
                                                                     )}
                                                                     )
                                                                 </span>
@@ -327,7 +339,7 @@ export function HistoryPanel({
                                                                 (~$
                                                                 {calculateCost(
                                                                     item.costDetails.image_output_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : 0.00004
+                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000032 : 0.00004
                                                                 )}
                                                                 )
                                                             </span>

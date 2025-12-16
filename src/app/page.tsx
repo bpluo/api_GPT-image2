@@ -27,7 +27,7 @@ export type HistoryMetadata = {
     mode: 'generate' | 'edit';
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
-    model?: 'gpt-image-1' | 'gpt-image-1-mini';
+    model?: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
 };
 
 type DrawnPoint = {
@@ -102,7 +102,7 @@ export default function HomePage() {
     const [editDrawnPoints, setEditDrawnPoints] = React.useState<DrawnPoint[]>([]);
     const [editMaskPreviewUrl, setEditMaskPreviewUrl] = React.useState<string | null>(null);
 
-    const [genModel, setGenModel] = React.useState<GenerationFormData['model']>('gpt-image-1');
+    const [genModel, setGenModel] = React.useState<GenerationFormData['model']>('gpt-image-1.5');
     const [genPrompt, setGenPrompt] = React.useState('');
     const [genN, setGenN] = React.useState([1]);
     const [genSize, setGenSize] = React.useState<GenerationFormData['size']>('auto');
@@ -112,7 +112,7 @@ export default function HomePage() {
     const [genBackground, setGenBackground] = React.useState<GenerationFormData['background']>('auto');
     const [genModeration, setGenModeration] = React.useState<GenerationFormData['moderation']>('auto');
 
-    const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1');
+    const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
 
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {

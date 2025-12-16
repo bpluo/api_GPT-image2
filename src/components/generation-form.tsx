@@ -36,7 +36,7 @@ export type GenerationFormData = {
     output_compression?: number;
     background: 'transparent' | 'opaque' | 'auto';
     moderation: 'low' | 'auto';
-    model: 'gpt-image-1' | 'gpt-image-1-mini';
+    model: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
 };
 
 type GenerationFormProps = {
@@ -179,6 +179,9 @@ export function GenerationForm({
                                 </SelectItem>
                                 <SelectItem value='gpt-image-1-mini' className='focus:bg-white/10'>
                                     gpt-image-1-mini
+                                </SelectItem>
+                                <SelectItem value='gpt-image-1.5' className='focus:bg-white/10'>
+                                    gpt-image-1.5
                                 </SelectItem>
                             </SelectContent>
                         </Select>

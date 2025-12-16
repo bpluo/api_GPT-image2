@@ -1,6 +1,8 @@
-# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT-IMAGE-1 Playground
+# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image Playground
 
-A web-based playground to interact with OpenAI's `gpt-image-1` model for generating and editing images.
+A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`, `gpt-image-1-mini`, and `gpt-image-1.5`) for generating and editing images.
+
+> **Note:** The playground defaults to `gpt-image-1.5`, OpenAI's latest and most capable image model with improved quality at lower cost.
 
 <p align="center">
   <img src="./readme-images/interface.jpg" alt="Interface" width="600"/>

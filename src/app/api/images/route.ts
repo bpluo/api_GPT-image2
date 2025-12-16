@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
         const mode = formData.get('mode') as 'generate' | 'edit' | null;
         const prompt = formData.get('prompt') as string | null;
-        const model = (formData.get('model') as 'gpt-image-1' | 'gpt-image-1-mini' | null) || 'gpt-image-1';
+        const model = (formData.get('model') as 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5' | null) || 'gpt-image-1.5';
 
         console.log(`Mode: ${mode}, Model: ${model}, Prompt: ${prompt ? prompt.substring(0, 50) + '...' : 'N/A'}`);
 
@@ -232,6 +232,23 @@ export async function POST(request: NextRequest) {
 
         let errorMessage = 'An unexpected error occurred.';
         let status = 500;
+
+        // Handle gpt-image-1.5 not yet available on OpenAI's backend
+        if (
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            error.code === 'model_not_found' &&
+            'status' in error &&
+            error.status === 404 &&
+            'message' in error &&
+            typeof error.message === 'string' &&
+            error.message.includes('gpt-image-1.5')
+        ) {
+            errorMessage = `gpt-image-1.5 is not yet available. OpenAI has announced this model but has not enabled it in their API backend yet. Please select gpt-image-1 or gpt-image-1-mini or try gpt-image-1.5 again later.`;
+            status = 404;
+            return NextResponse.json({ error: errorMessage }, { status });
+        }
 
         if (error instanceof Error) {
             errorMessage = error.message;

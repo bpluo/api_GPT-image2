@@ -23,15 +23,20 @@ const GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN = 0.000002; // $2.00/1M
 const GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN = 0.0000025; // $2.50/1M
 const GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
 
+// Pricing for gpt-image-1.5
+const GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN = 0.000005; // $5.00/1M
+const GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
+const GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN = 0.000032; // $32.00/1M
+
 /**
- * Estimates the cost of a gpt-image-1 or gpt-image-1-mini API call based on token usage.
+ * Estimates the cost of a GPT image model API call based on token usage.
  * @param usage - The usage object from the OpenAI API response.
- * @param model - The model used ('gpt-image-1' or 'gpt-image-1-mini').
+ * @param model - The model used ('gpt-image-1', 'gpt-image-1-mini', or 'gpt-image-1.5').
  * @returns CostDetails object or null if usage data is invalid.
  */
 export function calculateApiCost(
     usage: ApiUsage | undefined | null,
-    model: 'gpt-image-1' | 'gpt-image-1-mini' = 'gpt-image-1'
+    model: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5' = 'gpt-image-1.5'
 ): CostDetails | null {
     if (!usage || !usage.input_tokens_details || usage.output_tokens === undefined || usage.output_tokens === null) {
         console.warn('Invalid or missing usage data for cost calculation:', usage);
@@ -49,18 +54,24 @@ export function calculateApiCost(
     }
 
     // Select pricing based on model
-    const textInputCost =
-        model === 'gpt-image-1-mini'
-            ? GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN
-            : GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN;
-    const imageInputCost =
-        model === 'gpt-image-1-mini'
-            ? GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN
-            : GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN;
-    const imageOutputCost =
-        model === 'gpt-image-1-mini'
-            ? GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN
-            : GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN;
+    let textInputCost: number;
+    let imageInputCost: number;
+    let imageOutputCost: number;
+
+    if (model === 'gpt-image-1-mini') {
+        textInputCost = GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN;
+        imageInputCost = GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN;
+        imageOutputCost = GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN;
+    } else if (model === 'gpt-image-1.5') {
+        textInputCost = GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN;
+        imageInputCost = GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN;
+        imageOutputCost = GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN;
+    } else {
+        // Default to gpt-image-1
+        textInputCost = GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN;
+        imageInputCost = GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN;
+        imageOutputCost = GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN;
+    }
 
     const costUSD = textInT * textInputCost + imgInT * imageInputCost + imgOutT * imageOutputCost;
 
