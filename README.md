@@ -1,8 +1,8 @@
 # <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image Playground
 
-A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`, `gpt-image-1-mini`, and `gpt-image-1.5`) for generating and editing images.
+A web-based playground to interact with OpenAI's GPT image models (`gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, and `gpt-image-1-mini`) for generating and editing images.
 
-> **Note:** The playground defaults to `gpt-image-1.5`, OpenAI's latest and most capable image model with improved quality at lower cost.
+> **Note:** The playground defaults to `gpt-image-2`, OpenAI's latest GPT image model. It supports arbitrary resolutions up to 4K (with constraint validation) in addition to the legacy fixed sizes.
 
 <p align="center">
   <img src="./readme-images/interface.jpg" alt="Interface" width="600"/>
@@ -13,6 +13,7 @@ A web-based playground to interact with OpenAI's GPT image models (`gpt-image-1`
 *   **🎨 Image Generation Mode:** Create new images from text prompts.
 *   **🖌️ Image Editing Mode:** Modify existing images based on text prompts and optional masks.
 *   **⚙️ Full API Parameter Control:** Access and adjust all relevant parameters supported by the OpenAI Images API directly through the UI (size, quality, output format, compression, background, moderation, number of images).
+*   **📐 Custom Resolutions (gpt-image-2):** Pick from 2K/4K presets or enter an arbitrary Width × Height with live validation against the model's constraints (multiples of 16, max 3840px per edge, ≤ 3:1 aspect ratio, 655,360 to 8,294,400 total pixels).
 *   **🎭 Integrated Masking Tool:** Easily create or upload masks directly within the editing mode to specify areas for modification. Draw directly on the image to generate a mask.
 
      > ⚠️ Please note that `gpt-image-1`'s masking feature does not guarantee 100% control at this time. <br>1) [It's a known & acknowledged model limitation.](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/37) <br>2) [OpenAI are looking to address it in a future update.](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/41)
@@ -69,7 +70,7 @@ Follow these steps to get the playground running locally.
 
 You need an OpenAI API key to use this application. 
 
-⚠️ [Your OpenAI Organization needs to be verified to use `gpt-image-1`](https://help.openai.com/en/articles/10910291-api-organization-verification)
+⚠️ [Your OpenAI Organization needs to be verified to use GPT Image models](https://help.openai.com/en/articles/10910291-api-organization-verification)
 
 1.  If you don't have a `.env.local` file, create one.
 2.  Add your OpenAI API key to the `.env.local` file:

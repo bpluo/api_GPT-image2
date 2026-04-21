@@ -4,12 +4,14 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { getPresetTooltip, validateGptImage2Size } from '@/lib/size-utils';
 import {
     Square,
     RectangleHorizontal,
@@ -26,20 +28,26 @@ import {
     BrickWall,
     Lock,
     LockOpen,
-    HelpCircle
+    HelpCircle,
+    SquareDashed
 } from 'lucide-react';
 import * as React from 'react';
+
+import type { GptImageModel } from '@/lib/cost-utils';
+import type { SizePreset } from '@/lib/size-utils';
 
 export type GenerationFormData = {
     prompt: string;
     n: number;
-    size: '1024x1024' | '1536x1024' | '1024x1536' | 'auto';
+    size: SizePreset;
+    customWidth: number;
+    customHeight: number;
     quality: 'low' | 'medium' | 'high' | 'auto';
     output_format: 'png' | 'jpeg' | 'webp';
     output_compression?: number;
     background: 'transparent' | 'opaque' | 'auto';
     moderation: 'low' | 'auto';
-    model: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
+    model: GptImageModel;
 };
 
 type GenerationFormProps = {
@@ -58,6 +66,10 @@ type GenerationFormProps = {
     setN: React.Dispatch<React.SetStateAction<number[]>>;
     size: GenerationFormData['size'];
     setSize: React.Dispatch<React.SetStateAction<GenerationFormData['size']>>;
+    customWidth: number;
+    setCustomWidth: React.Dispatch<React.SetStateAction<number>>;
+    customHeight: number;
+    setCustomHeight: React.Dispatch<React.SetStateAction<number>>;
     quality: GenerationFormData['quality'];
     setQuality: React.Dispatch<React.SetStateAction<GenerationFormData['quality']>>;
     outputFormat: GenerationFormData['output_format'];
@@ -114,6 +126,10 @@ export function GenerationForm({
     setN,
     size,
     setSize,
+    customWidth,
+    setCustomWidth,
+    customHeight,
+    setCustomHeight,
     quality,
     setQuality,
     outputFormat,
@@ -130,6 +146,10 @@ export function GenerationForm({
     setPartialImages
 }: GenerationFormProps) {
     const showCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
+    const isGptImage2 = model === 'gpt-image-2';
+    const customSizeValidation =
+        size === 'custom' ? validateGptImage2Size(customWidth, customHeight) : { valid: true as const };
+    const customSizeInvalid = size === 'custom' && !customSizeValidation.valid;
 
     // Disable streaming when n > 1 (OpenAI limitation)
     React.useEffect(() => {
@@ -138,12 +158,31 @@ export function GenerationForm({
         }
     }, [n, enableStreaming, setEnableStreaming]);
 
+    // 'custom' is only valid on gpt-image-2; reset when switching to a legacy model
+    React.useEffect(() => {
+        if (!isGptImage2 && size === 'custom') {
+            setSize('auto');
+        }
+    }, [isGptImage2, size, setSize]);
+
+    // Reset transparent background when switching to gpt-image-2 (not supported)
+    React.useEffect(() => {
+        if (isGptImage2 && background === 'transparent') {
+            setBackground('auto');
+        }
+    }, [isGptImage2, background, setBackground]);
+
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        if (customSizeInvalid) {
+            return;
+        }
         const formData: GenerationFormData = {
             prompt,
             n: n[0],
             size,
+            customWidth,
+            customHeight,
             quality,
             output_format: outputFormat,
             background,
@@ -191,14 +230,17 @@ export function GenerationForm({
                                     <SelectValue placeholder='Select model' />
                                 </SelectTrigger>
                                 <SelectContent className='border-white/20 bg-black text-white'>
+                                    <SelectItem value='gpt-image-2' className='focus:bg-white/10'>
+                                        gpt-image-2
+                                    </SelectItem>
+                                    <SelectItem value='gpt-image-1.5' className='focus:bg-white/10'>
+                                        gpt-image-1.5
+                                    </SelectItem>
                                     <SelectItem value='gpt-image-1' className='focus:bg-white/10'>
                                         gpt-image-1
                                     </SelectItem>
                                     <SelectItem value='gpt-image-1-mini' className='focus:bg-white/10'>
                                         gpt-image-1-mini
-                                    </SelectItem>
-                                    <SelectItem value='gpt-image-1.5' className='focus:bg-white/10'>
-                                        gpt-image-1.5
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -319,20 +361,107 @@ export function GenerationForm({
                             disabled={isLoading}
                             className='flex flex-wrap gap-x-5 gap-y-3'>
                             <RadioItemWithIcon value='auto' id='size-auto' label='Auto' Icon={Sparkles} />
-                            <RadioItemWithIcon value='1024x1024' id='size-square' label='Square' Icon={Square} />
-                            <RadioItemWithIcon
-                                value='1536x1024'
-                                id='size-landscape'
-                                label='Landscape'
-                                Icon={RectangleHorizontal}
-                            />
-                            <RadioItemWithIcon
-                                value='1024x1536'
-                                id='size-portrait'
-                                label='Portrait'
-                                Icon={RectangleVertical}
-                            />
+                            {isGptImage2 && (
+                                <RadioItemWithIcon
+                                    value='custom'
+                                    id='size-custom'
+                                    label='Custom'
+                                    Icon={SquareDashed}
+                                />
+                            )}
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div>
+                                        <RadioItemWithIcon
+                                            value='square'
+                                            id='size-square'
+                                            label='Square'
+                                            Icon={Square}
+                                        />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>{getPresetTooltip('square', model)}</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div>
+                                        <RadioItemWithIcon
+                                            value='landscape'
+                                            id='size-landscape'
+                                            label='Landscape'
+                                            Icon={RectangleHorizontal}
+                                        />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>{getPresetTooltip('landscape', model)}</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div>
+                                        <RadioItemWithIcon
+                                            value='portrait'
+                                            id='size-portrait'
+                                            label='Portrait'
+                                            Icon={RectangleVertical}
+                                        />
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent>{getPresetTooltip('portrait', model)}</TooltipContent>
+                            </Tooltip>
                         </RadioGroup>
+                        {isGptImage2 && size === 'custom' && (
+                            <div className='space-y-2 rounded-md border border-white/10 bg-white/5 p-3'>
+                                <div className='flex items-center gap-3'>
+                                    <div className='flex-1 space-y-1'>
+                                        <Label htmlFor='custom-width' className='text-xs text-white/70'>
+                                            Width (px)
+                                        </Label>
+                                        <Input
+                                            id='custom-width'
+                                            type='number'
+                                            min={16}
+                                            max={3840}
+                                            step={16}
+                                            value={customWidth}
+                                            onChange={(e) => setCustomWidth(parseInt(e.target.value, 10) || 0)}
+                                            disabled={isLoading}
+                                            className='rounded-md border border-white/20 bg-black text-white focus:border-white/50 focus:ring-white/50'
+                                        />
+                                    </div>
+                                    <span className='pt-5 text-white/60'>×</span>
+                                    <div className='flex-1 space-y-1'>
+                                        <Label htmlFor='custom-height' className='text-xs text-white/70'>
+                                            Height (px)
+                                        </Label>
+                                        <Input
+                                            id='custom-height'
+                                            type='number'
+                                            min={16}
+                                            max={3840}
+                                            step={16}
+                                            value={customHeight}
+                                            onChange={(e) => setCustomHeight(parseInt(e.target.value, 10) || 0)}
+                                            disabled={isLoading}
+                                            className='rounded-md border border-white/20 bg-black text-white focus:border-white/50 focus:ring-white/50'
+                                        />
+                                    </div>
+                                </div>
+                                <p className='text-xs text-white/50'>
+                                    {(customWidth * customHeight).toLocaleString()} pixels (
+                                    {((customWidth * customHeight) / 8_294_400 * 100).toFixed(1)}% of max) ·{' '}
+                                    {customWidth > 0 && customHeight > 0
+                                        ? `${(Math.max(customWidth, customHeight) / Math.min(customWidth, customHeight)).toFixed(2)}:1 ratio`
+                                        : '—'}
+                                </p>
+                                {!customSizeValidation.valid && (
+                                    <p className='text-xs text-red-400'>{customSizeValidation.reason}</p>
+                                )}
+                                <p className='text-xs text-white/40'>
+                                    Constraints: multiples of 16, max edge 3840px, aspect ratio ≤ 3:1, 655,360 to
+                                    8,294,400 total pixels.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className='space-y-3'>
@@ -349,23 +478,25 @@ export function GenerationForm({
                         </RadioGroup>
                     </div>
 
-                    <div className='space-y-3'>
-                        <Label className='block text-white'>Background</Label>
-                        <RadioGroup
-                            value={background}
-                            onValueChange={(value) => setBackground(value as GenerationFormData['background'])}
-                            disabled={isLoading}
-                            className='flex flex-wrap gap-x-5 gap-y-3'>
-                            <RadioItemWithIcon value='auto' id='bg-auto' label='Auto' Icon={Sparkles} />
-                            <RadioItemWithIcon value='opaque' id='bg-opaque' label='Opaque' Icon={BrickWall} />
-                            <RadioItemWithIcon
-                                value='transparent'
-                                id='bg-transparent'
-                                label='Transparent'
-                                Icon={Eraser}
-                            />
-                        </RadioGroup>
-                    </div>
+                    {!isGptImage2 && (
+                        <div className='space-y-3'>
+                            <Label className='block text-white'>Background</Label>
+                            <RadioGroup
+                                value={background}
+                                onValueChange={(value) => setBackground(value as GenerationFormData['background'])}
+                                disabled={isLoading}
+                                className='flex flex-wrap gap-x-5 gap-y-3'>
+                                <RadioItemWithIcon value='auto' id='bg-auto' label='Auto' Icon={Sparkles} />
+                                <RadioItemWithIcon value='opaque' id='bg-opaque' label='Opaque' Icon={BrickWall} />
+                                <RadioItemWithIcon
+                                    value='transparent'
+                                    id='bg-transparent'
+                                    label='Transparent'
+                                    Icon={Eraser}
+                                />
+                            </RadioGroup>
+                        </div>
+                    )}
 
                     <div className='space-y-3'>
                         <Label className='block text-white'>Output Format</Label>
@@ -413,7 +544,7 @@ export function GenerationForm({
                 <CardFooter className='border-t border-white/10 p-4'>
                     <Button
                         type='submit'
-                        disabled={isLoading || !prompt}
+                        disabled={isLoading || !prompt || customSizeInvalid}
                         className='flex w-full items-center justify-center gap-2 rounded-md bg-white text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40'>
                         {isLoading && <Loader2 className='h-4 w-4 animate-spin' />}
                         {isLoading ? 'Generating...' : 'Generate'}

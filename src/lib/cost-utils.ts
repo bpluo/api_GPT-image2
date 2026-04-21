@@ -28,15 +28,72 @@ const GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN = 0.000005; // $5.00/1M
 const GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
 const GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN = 0.000032; // $32.00/1M
 
+// Pricing for gpt-image-2
+const GPT_IMAGE_2_TEXT_INPUT_COST_PER_TOKEN = 0.000005; // $5.00/1M
+const GPT_IMAGE_2_IMAGE_INPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
+const GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN = 0.00003; // $30.00/1M
+
+export type GptImageModel = 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5' | 'gpt-image-2';
+
+export type ModelRates = {
+    textInputPerToken: number;
+    imageInputPerToken: number;
+    imageOutputPerToken: number;
+    textInputPerMillion: number;
+    imageInputPerMillion: number;
+    imageOutputPerMillion: number;
+};
+
+export function getModelRates(model: GptImageModel): ModelRates {
+    if (model === 'gpt-image-1-mini') {
+        return {
+            textInputPerToken: GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN,
+            imageInputPerToken: GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN,
+            imageOutputPerToken: GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN,
+            textInputPerMillion: 2,
+            imageInputPerMillion: 2.5,
+            imageOutputPerMillion: 8
+        };
+    }
+    if (model === 'gpt-image-1.5') {
+        return {
+            textInputPerToken: GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN,
+            imageInputPerToken: GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN,
+            imageOutputPerToken: GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN,
+            textInputPerMillion: 5,
+            imageInputPerMillion: 8,
+            imageOutputPerMillion: 32
+        };
+    }
+    if (model === 'gpt-image-2') {
+        return {
+            textInputPerToken: GPT_IMAGE_2_TEXT_INPUT_COST_PER_TOKEN,
+            imageInputPerToken: GPT_IMAGE_2_IMAGE_INPUT_COST_PER_TOKEN,
+            imageOutputPerToken: GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN,
+            textInputPerMillion: 5,
+            imageInputPerMillion: 8,
+            imageOutputPerMillion: 30
+        };
+    }
+    return {
+        textInputPerToken: GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN,
+        imageInputPerToken: GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN,
+        imageOutputPerToken: GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN,
+        textInputPerMillion: 5,
+        imageInputPerMillion: 10,
+        imageOutputPerMillion: 40
+    };
+}
+
 /**
  * Estimates the cost of a GPT image model API call based on token usage.
  * @param usage - The usage object from the OpenAI API response.
- * @param model - The model used ('gpt-image-1', 'gpt-image-1-mini', or 'gpt-image-1.5').
+ * @param model - The model used.
  * @returns CostDetails object or null if usage data is invalid.
  */
 export function calculateApiCost(
     usage: ApiUsage | undefined | null,
-    model: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5' = 'gpt-image-1.5'
+    model: GptImageModel = 'gpt-image-2'
 ): CostDetails | null {
     if (!usage || !usage.input_tokens_details || usage.output_tokens === undefined || usage.output_tokens === null) {
         console.warn('Invalid or missing usage data for cost calculation:', usage);
@@ -66,6 +123,10 @@ export function calculateApiCost(
         textInputCost = GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN;
         imageInputCost = GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN;
         imageOutputCost = GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN;
+    } else if (model === 'gpt-image-2') {
+        textInputCost = GPT_IMAGE_2_TEXT_INPUT_COST_PER_TOKEN;
+        imageInputCost = GPT_IMAGE_2_IMAGE_INPUT_COST_PER_TOKEN;
+        imageOutputCost = GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN;
     } else {
         // Default to gpt-image-1
         textInputCost = GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN;

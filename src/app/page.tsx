@@ -6,7 +6,8 @@ import { HistoryPanel } from '@/components/history-panel';
 import { ImageOutput } from '@/components/image-output';
 import { PasswordDialog } from '@/components/password-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { calculateApiCost, type CostDetails } from '@/lib/cost-utils';
+import { calculateApiCost, type CostDetails, type GptImageModel } from '@/lib/cost-utils';
+import { getPresetDimensions } from '@/lib/size-utils';
 import { db, type ImageRecord } from '@/lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import * as React from 'react';
@@ -27,7 +28,7 @@ export type HistoryMetadata = {
     mode: 'generate' | 'edit';
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
-    model?: 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5';
+    model?: GptImageModel;
 };
 
 type DrawnPoint = {
@@ -76,7 +77,7 @@ export default function HomePage() {
     const [imageOutputView, setImageOutputView] = React.useState<'grid' | number>('grid');
     const [history, setHistory] = React.useState<HistoryMetadata[]>([]);
     const [isInitialLoad, setIsInitialLoad] = React.useState(true);
-    const [blobUrlCache, setBlobUrlCache] = React.useState<Record<string, string>>({});
+    const blobUrlCacheRef = React.useRef<Map<string, string>>(new Map());
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordDialogContext, setPasswordDialogContext] = React.useState<'initial' | 'retry'>('initial');
     const [lastApiCallArgs, setLastApiCallArgs] = React.useState<[GenerationFormData | EditingFormData] | null>(null);
@@ -91,6 +92,8 @@ export default function HomePage() {
     const [editPrompt, setEditPrompt] = React.useState('');
     const [editN, setEditN] = React.useState([1]);
     const [editSize, setEditSize] = React.useState<EditingFormData['size']>('auto');
+    const [editCustomWidth, setEditCustomWidth] = React.useState<number>(1024);
+    const [editCustomHeight, setEditCustomHeight] = React.useState<number>(1024);
     const [editQuality, setEditQuality] = React.useState<EditingFormData['quality']>('auto');
     const [editBrushSize, setEditBrushSize] = React.useState([20]);
     const [editShowMaskEditor, setEditShowMaskEditor] = React.useState(false);
@@ -102,17 +105,19 @@ export default function HomePage() {
     const [editDrawnPoints, setEditDrawnPoints] = React.useState<DrawnPoint[]>([]);
     const [editMaskPreviewUrl, setEditMaskPreviewUrl] = React.useState<string | null>(null);
 
-    const [genModel, setGenModel] = React.useState<GenerationFormData['model']>('gpt-image-1.5');
+    const [genModel, setGenModel] = React.useState<GenerationFormData['model']>('gpt-image-2');
     const [genPrompt, setGenPrompt] = React.useState('');
     const [genN, setGenN] = React.useState([1]);
     const [genSize, setGenSize] = React.useState<GenerationFormData['size']>('auto');
+    const [genCustomWidth, setGenCustomWidth] = React.useState<number>(1024);
+    const [genCustomHeight, setGenCustomHeight] = React.useState<number>(1024);
     const [genQuality, setGenQuality] = React.useState<GenerationFormData['quality']>('auto');
     const [genOutputFormat, setGenOutputFormat] = React.useState<GenerationFormData['output_format']>('png');
     const [genCompression, setGenCompression] = React.useState([100]);
     const [genBackground, setGenBackground] = React.useState<GenerationFormData['background']>('auto');
     const [genModeration, setGenModeration] = React.useState<GenerationFormData['moderation']>('auto');
 
-    const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-1.5');
+    const [editModel, setEditModel] = React.useState<EditingFormData['model']>('gpt-image-2');
 
     // Streaming state (shared between generate and edit modes)
     const [enableStreaming, setEnableStreaming] = React.useState(false);
@@ -122,31 +127,28 @@ export default function HomePage() {
 
     const getImageSrc = React.useCallback(
         (filename: string): string | undefined => {
-            if (blobUrlCache[filename]) {
-                return blobUrlCache[filename];
-            }
+            const cached = blobUrlCacheRef.current.get(filename);
+            if (cached) return cached;
 
             const record = allDbImages?.find((img) => img.filename === filename);
             if (record?.blob) {
                 const url = URL.createObjectURL(record.blob);
-
+                blobUrlCacheRef.current.set(filename, url);
                 return url;
             }
 
             return undefined;
         },
-        [allDbImages, blobUrlCache]
+        [allDbImages]
     );
 
     React.useEffect(() => {
+        const cache = blobUrlCacheRef.current;
         return () => {
-            Object.values(blobUrlCache).forEach((url) => {
-                if (url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
+            cache.forEach((url) => URL.revokeObjectURL(url));
+            cache.clear();
         };
-    }, [blobUrlCache]);
+    }, []);
 
     React.useEffect(() => {
         return () => {
@@ -334,7 +336,11 @@ export default function HomePage() {
             apiFormData.append('model', genModel);
             apiFormData.append('prompt', genPrompt);
             apiFormData.append('n', genN[0].toString());
-            apiFormData.append('size', genSize);
+            const genSizeToSend =
+                genSize === 'custom'
+                    ? `${genCustomWidth}x${genCustomHeight}`
+                    : (getPresetDimensions(genSize, genModel) ?? genSize);
+            apiFormData.append('size', genSizeToSend);
             apiFormData.append('quality', genQuality);
             apiFormData.append('output_format', genOutputFormat);
             if (
@@ -349,7 +355,11 @@ export default function HomePage() {
             apiFormData.append('model', editModel);
             apiFormData.append('prompt', editPrompt);
             apiFormData.append('n', editN[0].toString());
-            apiFormData.append('size', editSize);
+            const editSizeToSend =
+                editSize === 'custom'
+                    ? `${editCustomWidth}x${editCustomHeight}`
+                    : (getPresetDimensions(editSize, editModel) ?? editSize);
+            apiFormData.append('size', editSizeToSend);
             apiFormData.append('quality', editQuality);
 
             editImageFiles.forEach((file, index) => {
@@ -469,10 +479,7 @@ export default function HomePage() {
                                                         await db.images.put({ filename: img.filename, blob });
 
                                                         const blobUrl = URL.createObjectURL(blob);
-                                                        setBlobUrlCache((prev) => ({
-                                                            ...prev,
-                                                            [img.filename]: blobUrl
-                                                        }));
+                                                        blobUrlCacheRef.current.set(img.filename, blobUrl);
 
                                                         return { filename: img.filename, path: blobUrl };
                                                     } catch (dbError) {
@@ -602,7 +609,7 @@ export default function HomePage() {
                                 await db.images.put({ filename: img.filename, blob });
 
                                 const blobUrl = URL.createObjectURL(blob);
-                                setBlobUrlCache((prev) => ({ ...prev, [img.filename]: blobUrl }));
+                                blobUrlCacheRef.current.set(img.filename, blobUrl);
 
                                 return { filename: img.filename, path: blobUrl };
                             } catch (dbError) {
@@ -652,45 +659,48 @@ export default function HomePage() {
         }
     };
 
-    const handleHistorySelect = (item: HistoryMetadata) => {
-        const originalStorageMode = item.storageModeUsed || 'fs';
+    const handleHistorySelect = React.useCallback(
+        (item: HistoryMetadata) => {
+            const originalStorageMode = item.storageModeUsed || 'fs';
 
-        const selectedBatchPromises = item.images.map(async (imgInfo) => {
-            let path: string | undefined;
-            if (originalStorageMode === 'indexeddb') {
-                path = getImageSrc(imgInfo.filename);
-            } else {
-                path = `/api/image/${imgInfo.filename}`;
-            }
+            const selectedBatchPromises = item.images.map(async (imgInfo) => {
+                let path: string | undefined;
+                if (originalStorageMode === 'indexeddb') {
+                    path = getImageSrc(imgInfo.filename);
+                } else {
+                    path = `/api/image/${imgInfo.filename}`;
+                }
 
-            if (path) {
-                return { path, filename: imgInfo.filename };
-            } else {
-                console.warn(
-                    `Could not get image source for history item: ${imgInfo.filename} (mode: ${originalStorageMode})`
-                );
-                setError(`Image ${imgInfo.filename} could not be loaded.`);
-                return null;
-            }
-        });
+                if (path) {
+                    return { path, filename: imgInfo.filename };
+                } else {
+                    console.warn(
+                        `Could not get image source for history item: ${imgInfo.filename} (mode: ${originalStorageMode})`
+                    );
+                    setError(`Image ${imgInfo.filename} could not be loaded.`);
+                    return null;
+                }
+            });
 
-        Promise.all(selectedBatchPromises).then((resolvedBatch) => {
-            const validImages = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
+            Promise.all(selectedBatchPromises).then((resolvedBatch) => {
+                const validImages = resolvedBatch.filter(Boolean) as { path: string; filename: string }[];
 
-            if (validImages.length !== item.images.length && !error) {
-                setError(
-                    'Some images from this history entry could not be loaded (they might have been cleared or are missing).'
-                );
-            } else if (validImages.length === item.images.length) {
-                setError(null);
-            }
+                if (validImages.length !== item.images.length) {
+                    setError(
+                        'Some images from this history entry could not be loaded (they might have been cleared or are missing).'
+                    );
+                } else {
+                    setError(null);
+                }
 
-            setLatestImageBatch(validImages.length > 0 ? validImages : null);
-            setImageOutputView(validImages.length > 1 ? 'grid' : 0);
-        });
-    };
+                setLatestImageBatch(validImages.length > 0 ? validImages : null);
+                setImageOutputView(validImages.length > 1 ? 'grid' : 0);
+            });
+        },
+        [getImageSrc]
+    );
 
-    const handleClearHistory = async () => {
+    const handleClearHistory = React.useCallback(async () => {
         const confirmationMessage =
             effectiveStorageModeClient === 'indexeddb'
                 ? 'Are you sure you want to clear the entire image history? In IndexedDB mode, this will also permanently delete all stored images. This cannot be undone.'
@@ -707,14 +717,15 @@ export default function HomePage() {
 
                 if (effectiveStorageModeClient === 'indexeddb') {
                     await db.images.clear();
-                    setBlobUrlCache({});
+                    blobUrlCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+                    blobUrlCacheRef.current.clear();
                 }
             } catch (e) {
                 console.error('Failed during history clearing:', e);
                 setError(`Failed to clear history: ${e instanceof Error ? e.message : String(e)}`);
             }
         }
-    };
+    }, []);
 
     const handleSendToEdit = async (filename: string) => {
         if (isSendingToEdit) return;
@@ -778,70 +789,78 @@ export default function HomePage() {
         }
     };
 
-    const executeDeleteItem = async (item: HistoryMetadata) => {
-        if (!item) return;
-        setError(null);
+    const executeDeleteItem = React.useCallback(
+        async (item: HistoryMetadata) => {
+            if (!item) return;
+            setError(null);
 
-        const { images: imagesInEntry, storageModeUsed, timestamp } = item;
-        const filenamesToDelete = imagesInEntry.map((img) => img.filename);
+            const { images: imagesInEntry, storageModeUsed, timestamp } = item;
+            const filenamesToDelete = imagesInEntry.map((img) => img.filename);
 
-        try {
-            if (storageModeUsed === 'indexeddb') {
-                await db.images.where('filename').anyOf(filenamesToDelete).delete();
-                setBlobUrlCache((prevCache) => {
-                    const newCache = { ...prevCache };
-                    filenamesToDelete.forEach((fn) => delete newCache[fn]);
-                    return newCache;
-                });
-            } else if (storageModeUsed === 'fs') {
-                const apiPayload: { filenames: string[]; passwordHash?: string } = { filenames: filenamesToDelete };
-                if (isPasswordRequiredByBackend && clientPasswordHash) {
-                    apiPayload.passwordHash = clientPasswordHash;
+            try {
+                if (storageModeUsed === 'indexeddb') {
+                    await db.images.where('filename').anyOf(filenamesToDelete).delete();
+                    filenamesToDelete.forEach((fn) => {
+                        const url = blobUrlCacheRef.current.get(fn);
+                        if (url) URL.revokeObjectURL(url);
+                        blobUrlCacheRef.current.delete(fn);
+                    });
+                } else if (storageModeUsed === 'fs') {
+                    const apiPayload: { filenames: string[]; passwordHash?: string } = {
+                        filenames: filenamesToDelete
+                    };
+                    if (isPasswordRequiredByBackend && clientPasswordHash) {
+                        apiPayload.passwordHash = clientPasswordHash;
+                    }
+
+                    const response = await fetch('/api/image-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(apiPayload)
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.error || `API deletion failed with status ${response.status}`);
+                    }
                 }
 
-                const response = await fetch('/api/image-delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(apiPayload)
-                });
-
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.error || `API deletion failed with status ${response.status}`);
-                }
+                setHistory((prevHistory) => prevHistory.filter((h) => h.timestamp !== timestamp));
+                setLatestImageBatch((prev) =>
+                    prev && prev.some((img) => filenamesToDelete.includes(img.filename)) ? null : prev
+                );
+            } catch (e: unknown) {
+                console.error('Error during item deletion:', e);
+                setError(e instanceof Error ? e.message : 'An unexpected error occurred during deletion.');
+            } finally {
+                setItemToDeleteConfirm(null);
             }
+        },
+        [isPasswordRequiredByBackend, clientPasswordHash]
+    );
 
-            setHistory((prevHistory) => prevHistory.filter((h) => h.timestamp !== timestamp));
-            if (latestImageBatch && latestImageBatch.some((img) => filenamesToDelete.includes(img.filename))) {
-                setLatestImageBatch(null); // Clear current view if it contained deleted images
+    const handleRequestDeleteItem = React.useCallback(
+        (item: HistoryMetadata) => {
+            if (!skipDeleteConfirmation) {
+                setDialogCheckboxStateSkipConfirm(skipDeleteConfirmation);
+                setItemToDeleteConfirm(item);
+            } else {
+                executeDeleteItem(item);
             }
-        } catch (e: unknown) {
-            console.error('Error during item deletion:', e);
-            setError(e instanceof Error ? e.message : 'An unexpected error occurred during deletion.');
-        } finally {
-            setItemToDeleteConfirm(null); // Always close dialog
-        }
-    };
+        },
+        [skipDeleteConfirmation, executeDeleteItem]
+    );
 
-    const handleRequestDeleteItem = (item: HistoryMetadata) => {
-        if (!skipDeleteConfirmation) {
-            setDialogCheckboxStateSkipConfirm(skipDeleteConfirmation);
-            setItemToDeleteConfirm(item);
-        } else {
-            executeDeleteItem(item);
-        }
-    };
-
-    const handleConfirmDeletion = () => {
+    const handleConfirmDeletion = React.useCallback(() => {
         if (itemToDeleteConfirm) {
             executeDeleteItem(itemToDeleteConfirm);
             setSkipDeleteConfirmation(dialogCheckboxStateSkipConfirm);
         }
-    };
+    }, [itemToDeleteConfirm, executeDeleteItem, dialogCheckboxStateSkipConfirm]);
 
-    const handleCancelDeletion = () => {
+    const handleCancelDeletion = React.useCallback(() => {
         setItemToDeleteConfirm(null);
-    };
+    }, []);
 
     return (
         <main className='flex min-h-screen flex-col items-center bg-black p-4 text-white md:p-8 lg:p-12'>
@@ -856,7 +875,7 @@ export default function HomePage() {
                         : 'Set a password to use for API requests.'
                 }
             />
-            <div className='w-full max-w-7xl space-y-6'>
+            <div className='w-full max-w-screen-2xl space-y-6'>
                 <div className='grid grid-cols-1 gap-6 lg:grid-cols-2'>
                     <div className='relative flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
                         <div className={mode === 'generate' ? 'block h-full w-full' : 'hidden'}>
@@ -876,6 +895,10 @@ export default function HomePage() {
                                 setN={setGenN}
                                 size={genSize}
                                 setSize={setGenSize}
+                                customWidth={genCustomWidth}
+                                setCustomWidth={setGenCustomWidth}
+                                customHeight={genCustomHeight}
+                                setCustomHeight={setGenCustomHeight}
                                 quality={genQuality}
                                 setQuality={setGenQuality}
                                 outputFormat={genOutputFormat}
@@ -914,6 +937,10 @@ export default function HomePage() {
                                 setEditN={setEditN}
                                 editSize={editSize}
                                 setEditSize={setEditSize}
+                                editCustomWidth={editCustomWidth}
+                                setEditCustomWidth={setEditCustomWidth}
+                                editCustomHeight={editCustomHeight}
+                                setEditCustomHeight={setEditCustomHeight}
                                 editQuality={editQuality}
                                 setEditQuality={setEditQuality}
                                 editBrushSize={editBrushSize}

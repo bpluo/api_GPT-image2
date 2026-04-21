@@ -1,12 +1,12 @@
 {
   "name": "gpt-image-playground",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint src",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
@@ -28,9 +28,9 @@
     "dexie-react-hooks": "^1.1.7",
     "lucide-react": "^0.503.0",
     "mime-types": "^3.0.2",
-    "next": "15.5.9",
+    "next": "^16.2.4",
     "next-themes": "^0.4.6",
-    "openai": "^6.14.0",
+    "openai": "^6.34.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.2.0"

@@ -1,6 +1,7 @@
 'use client';
 
 import type { HistoryMetadata } from '@/app/page';
+import { getModelRates, type GptImageModel } from '@/lib/cost-utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -55,7 +56,7 @@ const calculateCost = (value: number, rate: number): string => {
     return isNaN(cost) ? 'N/A' : cost.toFixed(4);
 };
 
-export function HistoryPanel({
+function HistoryPanelImpl({
     history,
     onSelectImage,
     onClearHistory,
@@ -121,7 +122,19 @@ export function HistoryPanel({
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                    <p className='font-medium'>gpt-image-1:</p>
+                                    <p className='font-medium'>gpt-image-2:</p>
+                                    <ul className='list-disc pl-4'>
+                                        <li>Text Input: $5 / 1M tokens</li>
+                                        <li>Image Input: $8 / 1M tokens</li>
+                                        <li>Image Output: $30 / 1M tokens</li>
+                                    </ul>
+                                    <p className='mt-2 font-medium'>gpt-image-1.5:</p>
+                                    <ul className='list-disc pl-4'>
+                                        <li>Text Input: $5 / 1M tokens</li>
+                                        <li>Image Input: $8 / 1M tokens</li>
+                                        <li>Image Output: $32 / 1M tokens</li>
+                                    </ul>
+                                    <p className='mt-2 font-medium'>gpt-image-1:</p>
                                     <ul className='list-disc pl-4'>
                                         <li>Text Input: $5 / 1M tokens</li>
                                         <li>Image Input: $10 / 1M tokens</li>
@@ -132,12 +145,6 @@ export function HistoryPanel({
                                         <li>Text Input: $2 / 1M tokens</li>
                                         <li>Image Input: $2.50 / 1M tokens</li>
                                         <li>Image Output: $8 / 1M tokens</li>
-                                    </ul>
-                                    <p className='mt-2 font-medium'>gpt-image-1.5:</p>
-                                    <ul className='list-disc pl-4'>
-                                        <li>Text Input: $5 / 1M tokens</li>
-                                        <li>Image Input: $8 / 1M tokens</li>
-                                        <li>Image Output: $32 / 1M tokens</li>
                                     </ul>
                                 </div>
                                 <div className='space-y-2 py-4 text-sm text-neutral-300'>
@@ -281,77 +288,80 @@ export function HistoryPanel({
                                                             Estimated cost breakdown for this image generation.
                                                         </DialogDescription>
                                                     </DialogHeader>
-                                                    <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                                        <p>Pricing for {item.model || 'gpt-image-1'}:</p>
-                                                        <ul className='list-disc pl-4'>
-                                                            {(item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? (
-                                                                <>
-                                                                    <li>Text Input: $2 / 1M tokens</li>
-                                                                    <li>Image Input: $2.50 / 1M tokens</li>
-                                                                    <li>Image Output: $8 / 1M tokens</li>
-                                                                </>
-                                                            ) : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $8 / 1M tokens</li>
-                                                                    <li>Image Output: $32 / 1M tokens</li>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <li>Text Input: $5 / 1M tokens</li>
-                                                                    <li>Image Input: $10 / 1M tokens</li>
-                                                                    <li>Image Output: $40 / 1M tokens</li>
-                                                                </>
-                                                            )}
-                                                        </ul>
-                                                    </div>
-                                                    <div className='space-y-2 py-4 text-sm text-neutral-300'>
-                                                        <div className='flex justify-between'>
-                                                            <span>Text Input Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.text_input_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.text_input_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000002 : 0.000005
-                                                                )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        {item.costDetails.image_input_tokens > 0 && (
-                                                            <div className='flex justify-between'>
-                                                                <span>Image Input Tokens:</span>{' '}
-                                                                <span>
-                                                                    {item.costDetails.image_input_tokens.toLocaleString()}{' '}
-                                                                    (~$
-                                                                    {calculateCost(
-                                                                        item.costDetails.image_input_tokens,
-                                                                        (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.0000025 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000008 : 0.00001
+                                                    {(() => {
+                                                        const modelForRates: GptImageModel = (item.model ||
+                                                            'gpt-image-1') as GptImageModel;
+                                                        const rates = getModelRates(modelForRates);
+                                                        return (
+                                                            <>
+                                                                <div className='space-y-1 pt-1 text-xs text-neutral-400'>
+                                                                    <p>Pricing for {modelForRates}:</p>
+                                                                    <ul className='list-disc pl-4'>
+                                                                        <li>
+                                                                            Text Input: ${rates.textInputPerMillion} /
+                                                                            1M tokens
+                                                                        </li>
+                                                                        <li>
+                                                                            Image Input: ${rates.imageInputPerMillion} /
+                                                                            1M tokens
+                                                                        </li>
+                                                                        <li>
+                                                                            Image Output: $
+                                                                            {rates.imageOutputPerMillion} / 1M tokens
+                                                                        </li>
+                                                                    </ul>
+                                                                </div>
+                                                                <div className='space-y-2 py-4 text-sm text-neutral-300'>
+                                                                    <div className='flex justify-between'>
+                                                                        <span>Text Input Tokens:</span>{' '}
+                                                                        <span>
+                                                                            {item.costDetails.text_input_tokens.toLocaleString()}{' '}
+                                                                            (~$
+                                                                            {calculateCost(
+                                                                                item.costDetails.text_input_tokens,
+                                                                                rates.textInputPerToken
+                                                                            )}
+                                                                            )
+                                                                        </span>
+                                                                    </div>
+                                                                    {item.costDetails.image_input_tokens > 0 && (
+                                                                        <div className='flex justify-between'>
+                                                                            <span>Image Input Tokens:</span>{' '}
+                                                                            <span>
+                                                                                {item.costDetails.image_input_tokens.toLocaleString()}{' '}
+                                                                                (~$
+                                                                                {calculateCost(
+                                                                                    item.costDetails
+                                                                                        .image_input_tokens,
+                                                                                    rates.imageInputPerToken
+                                                                                )}
+                                                                                )
+                                                                            </span>
+                                                                        </div>
                                                                     )}
-                                                                    )
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                        <div className='flex justify-between'>
-                                                            <span>Image Output Tokens:</span>{' '}
-                                                            <span>
-                                                                {item.costDetails.image_output_tokens.toLocaleString()}{' '}
-                                                                (~$
-                                                                {calculateCost(
-                                                                    item.costDetails.image_output_tokens,
-                                                                    (item.model || 'gpt-image-1') === 'gpt-image-1-mini' ? 0.000008 : (item.model || 'gpt-image-1') === 'gpt-image-1.5' ? 0.000032 : 0.00004
-                                                                )}
-                                                                )
-                                                            </span>
-                                                        </div>
-                                                        <hr className='my-2 border-neutral-700' />
-                                                        <div className='flex justify-between font-medium text-white'>
-                                                            <span>Total Estimated Cost:</span>
-                                                            <span>
-                                                                ${item.costDetails.estimated_cost_usd.toFixed(4)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                                    <div className='flex justify-between'>
+                                                                        <span>Image Output Tokens:</span>{' '}
+                                                                        <span>
+                                                                            {item.costDetails.image_output_tokens.toLocaleString()}{' '}
+                                                                            (~$
+                                                                            {calculateCost(
+                                                                                item.costDetails.image_output_tokens,
+                                                                                rates.imageOutputPerToken
+                                                                            )}
+                                                                            )
+                                                                        </span>
+                                                                    </div>
+                                                                    <hr className='my-2 border-neutral-700' />
+                                                                    <div className='flex justify-between font-medium text-white'>
+                                                                        <span>Total Estimated Cost:</span>
+                                                                        <span>
+                                                                            ${item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
                                                     <DialogFooter>
                                                         <DialogClose asChild>
                                                             <Button
@@ -508,3 +518,5 @@ export function HistoryPanel({
         </Card>
     );
 }
+
+export const HistoryPanel = React.memo(HistoryPanelImpl);
