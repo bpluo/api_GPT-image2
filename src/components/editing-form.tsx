@@ -384,7 +384,7 @@ export function EditingForm({
             const totalFiles = imageFiles.length + newFiles.length;
 
             if (totalFiles > maxImages) {
-                alert(`You can only select up to ${maxImages} images.`);
+                alert(`你最多只能选择 ${maxImages} 张图片。`);
                 const allowedNewFiles = newFiles.slice(0, maxImages - imageFiles.length);
                 if (allowedNewFiles.length === 0) {
                     event.target.value = '';
@@ -429,7 +429,7 @@ export function EditingForm({
         }
 
         if (file.type !== 'image/png') {
-            alert('Invalid file type. Please upload a PNG file for the mask.');
+            alert('无效的文件类型。请滵上一个 PNG 文件作为遯罩。');
             event.target.value = '';
             return;
         }
@@ -441,7 +441,7 @@ export function EditingForm({
         img.onload = () => {
             if (img.width !== editOriginalImageSize.width || img.height !== editOriginalImageSize.height) {
                 alert(
-                    `Mask dimensions (${img.width}x${img.height}) must match the source image dimensions (${editOriginalImageSize.width}x${editOriginalImageSize.height}).`
+                    `遯罩笄度 (${img.width}x${img.height}) 必須與殐証圖像笄度 (${editOriginalImageSize.width}x${editOriginalImageSize.height}) 相欺配。`
                 );
                 URL.revokeObjectURL(objectUrl);
                 event.target.value = '';
@@ -478,11 +478,11 @@ export function EditingForm({
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (imageFiles.length === 0) {
-            alert('Please select at least one image to edit.');
+            alert('請選擇至少一张图像來编辑。');
             return;
         }
         if (editDrawnPoints.length > 0 && !editGeneratedMaskFile && !editIsMaskSaved) {
-            alert('Please save the mask you have drawn before submitting.');
+            alert('請先保存你箕上的遯罩，然後提交。');
             return;
         }
         if (customSizeInvalid) {
@@ -504,9 +504,9 @@ export function EditingForm({
     };
 
     const displayFileNames = (files: File[]) => {
-        if (files.length === 0) return 'No file selected.';
+        if (files.length === 0) return '未選擇任何文件。';
         if (files.length === 1) return files[0].name;
-        return `${files.length} files selected`;
+        return `已選擇 ${files.length} 个文件`;
     };
 
     return (
@@ -514,7 +514,7 @@ export function EditingForm({
             <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
                 <div>
                     <div className='flex items-center'>
-                        <CardTitle className='py-1 text-lg font-medium text-white'>Edit Image</CardTitle>
+                        <CardTitle className='py-1 text-lg font-medium text-white'>编辑图片</CardTitle>
                         {isPasswordRequiredByBackend && (
                             <Button
                                 variant='ghost'
@@ -526,7 +526,7 @@ export function EditingForm({
                             </Button>
                         )}
                     </div>
-                    <CardDescription className='mt-1 text-white/60'>Modify an existing image with a text prompt.</CardDescription>
+                    <CardDescription className='mt-1 text-white/60'>使用文本描述修改有旨图像。</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>
@@ -534,14 +534,14 @@ export function EditingForm({
                 <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
                     <div className='space-y-1.5'>
                         <Label htmlFor='edit-model-select' className='text-white'>
-                            Model
+                            模型
                         </Label>
                         <div className='flex items-center gap-4'>
                             <Select value={editModel} onValueChange={(value) => setEditModel(value as EditingFormData['model'])} disabled={isLoading}>
                                 <SelectTrigger
                                     id='edit-model-select'
                                     className='w-[180px] rounded-md border border-white/20 bg-black text-white focus:border-white/50 focus:ring-white/50'>
-                                    <SelectValue placeholder='Select model' />
+                                    <SelectValue placeholder='选择模型' />
                                 </SelectTrigger>
                                 <SelectContent className='border-white/20 bg-black text-white'>
                                     <SelectItem value='gpt-image-2' className='focus:bg-white/10'>
@@ -564,9 +564,7 @@ export function EditingForm({
                                         <Info className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
                                     </TooltipTrigger>
                                     <TooltipContent className='max-w-[280px]'>
-                                        gpt-image-2 always processes reference images at high fidelity. This improves
-                                        edit quality but uses more input image tokens per request than
-                                        gpt-image-1.5&apos;s default fidelity.
+                                        gpt-image-2 总是以高忌实度处理参考图像。这改良了编辑质量，但每个请求使用更多输入图像令牌，比 gpt-image-1.5 的默认忌实度。
                                     </TooltipContent>
                                 </Tooltip>
                             )}
@@ -583,14 +581,14 @@ export function EditingForm({
                                         <Label
                                             htmlFor='edit-enable-streaming'
                                             className={`text-sm ${editN[0] > 1 ? 'cursor-not-allowed text-white/40' : 'cursor-pointer text-white/80'}`}>
-                                            Enable Streaming
+                                            启用流式处理
                                         </Label>
                                     </div>
                                 </TooltipTrigger>
                                 <TooltipContent className='max-w-[250px]'>
                                     {editN[0] > 1
-                                        ? 'Streaming is only supported when generating a single image (n=1).'
-                                        : 'Shows partial preview images as they are generated, providing a more interactive experience.'}
+                                        ? '流式处理仅在生成1个图像(n=1)时支持。'
+                                        : '在生成1句中显示部分预览图像，会提供更具交互性的体验。'}
                                 </TooltipContent>
                             </Tooltip>
                         </div>
@@ -599,13 +597,13 @@ export function EditingForm({
                     {enableStreaming && (
                         <div className='space-y-3'>
                             <div className='flex items-center gap-2'>
-                                <Label className='text-white'>Preview Images</Label>
+                                <Label className='text-white'>预览图像</Label>
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <HelpCircle className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
                                     </TooltipTrigger>
                                     <TooltipContent className='max-w-[250px]'>
-                                        Each preview image adds ~$0.003 to the cost (100 additional output tokens).
+                                        每个预览图像增加约 $0.003 的成本（100 个適外输出令牌）。
                                     </TooltipContent>
                                 </Tooltip>
                             </div>
@@ -650,11 +648,11 @@ export function EditingForm({
 
                     <div className='space-y-1.5'>
                         <Label htmlFor='edit-prompt' className='text-white'>
-                            Prompt
+                            描述
                         </Label>
                         <Textarea
                             id='edit-prompt'
-                            placeholder='e.g., Add a party hat to the main subject'
+                            placeholder='例如：为主体增加一正夺目的哈罗'
                             value={editPrompt}
                             onChange={(e) => setEditPrompt(e.target.value)}
                             required
@@ -664,13 +662,13 @@ export function EditingForm({
                     </div>
 
                     <div className='space-y-2'>
-                        <Label className='text-white'>Source Image(s) [Max: 10]</Label>
+                        <Label className='text-white'>源图像(s) [最大: 10]</Label>
                         <Label
                             htmlFor='image-files-input'
                             className='flex h-10 w-full cursor-pointer items-center justify-between rounded-md border border-white/20 bg-black px-3 py-2 text-sm transition-colors hover:bg-white/5'>
                             <span className='truncate pr-2 text-white/60'>{displayFileNames(imageFiles)}</span>
                             <span className='flex shrink-0 items-center gap-1.5 rounded-md bg-white/10 px-3 py-1 text-xs font-medium text-white/80 hover:bg-white/20'>
-                                <Upload className='h-3 w-3' /> Browse...
+                                <Upload className='h-3 w-3' /> 浏览...
                             </span>
                         </Label>
                         <Input

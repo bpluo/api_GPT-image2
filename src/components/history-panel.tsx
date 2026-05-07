@@ -103,60 +103,60 @@ function HistoryPanelImpl({
         <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
             <CardHeader className='flex flex-row items-center justify-between gap-4 border-b border-white/10 px-4 py-3'>
                 <div className='flex items-center gap-2'>
-                    <CardTitle className='text-lg font-medium text-white'>History</CardTitle>
+                    <CardTitle className='text-lg font-medium text-white'>历史记录</CardTitle>
                     {totalCost > 0 && (
                         <Dialog open={isTotalCostDialogOpen} onOpenChange={setIsTotalCostDialogOpen}>
                             <DialogTrigger asChild>
                                 <button
                                     className='mt-0.5 flex items-center gap-1 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[12px] text-white transition-colors hover:bg-green-500/90'
-                                    aria-label='Show total cost summary'>
+                                    aria-label='显示总費用简易'>
                                     Total Cost: ${totalCost.toFixed(4)}
                                 </button>
                             </DialogTrigger>
                             <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
                                 <DialogHeader>
-                                    <DialogTitle className='text-white'>Total Cost Summary</DialogTitle>
+                                    <DialogTitle className='text-white'>总費用简易</DialogTitle>
                                     {/* Add sr-only description for accessibility */}
                                     <DialogDescription className='sr-only'>
-                                        A summary of the total estimated cost for all generated images in the history.
+                                        所有生成图像在历史记录中估计总費用的詳述。
                                     </DialogDescription>
                                 </DialogHeader>
                                 <div className='space-y-1 pt-1 text-xs text-neutral-400'>
                                     <p className='font-medium'>gpt-image-2:</p>
                                     <ul className='list-disc pl-4'>
-                                        <li>Text Input: $5 / 1M tokens</li>
-                                        <li>Image Input: $8 / 1M tokens</li>
-                                        <li>Image Output: $30 / 1M tokens</li>
+                                        <li>文本输入: $5 / 1M 令牌</li>
+                                        <li>图像输入: $8 / 1M 令牌</li>
+                                        <li>图像输出: $30 / 1M 令牌</li>
                                     </ul>
                                     <p className='mt-2 font-medium'>gpt-image-1.5:</p>
                                     <ul className='list-disc pl-4'>
-                                        <li>Text Input: $5 / 1M tokens</li>
-                                        <li>Image Input: $8 / 1M tokens</li>
-                                        <li>Image Output: $32 / 1M tokens</li>
+                                        <li>文本输入: $5 / 1M 令牌</li>
+                                        <li>图像输入: $8 / 1M 令牌</li>
+                                        <li>图像输出: $32 / 1M 令牌</li>
                                     </ul>
                                     <p className='mt-2 font-medium'>gpt-image-1:</p>
                                     <ul className='list-disc pl-4'>
-                                        <li>Text Input: $5 / 1M tokens</li>
-                                        <li>Image Input: $10 / 1M tokens</li>
-                                        <li>Image Output: $40 / 1M tokens</li>
+                                        <li>文本输入: $5 / 1M 令牌</li>
+                                        <li>图像输入: $10 / 1M 令牌</li>
+                                        <li>图像输出: $40 / 1M 令牌</li>
                                     </ul>
                                     <p className='mt-2 font-medium'>gpt-image-1-mini:</p>
                                     <ul className='list-disc pl-4'>
-                                        <li>Text Input: $2 / 1M tokens</li>
-                                        <li>Image Input: $2.50 / 1M tokens</li>
-                                        <li>Image Output: $8 / 1M tokens</li>
+                                        <li>文本输入: $2 / 1M 令牌</li>
+                                        <li>图像输入: $2.50 / 1M 令牌</li>
+                                        <li>图像输出: $8 / 1M 令牌</li>
                                     </ul>
                                 </div>
-                                <div className='space-y-2 py-4 text-sm text-neutral-300'>
+                                    <div className='space-y-2 py-4 text-sm text-neutral-300'>
                                     <div className='flex justify-between'>
-                                        <span>Total Images Generated:</span> <span>{totalImages.toLocaleString()}</span>
+                                        <span>比生成的总图像:</span> <span>{totalImages.toLocaleString()}</span>
                                     </div>
                                     <div className='flex justify-between'>
-                                        <span>Average Cost Per Image:</span> <span>${averageCost.toFixed(4)}</span>
+                                        <span>每个图像的平均費用:</span> <span>${averageCost.toFixed(4)}</span>
                                     </div>
                                     <hr className='my-2 border-neutral-700' />
                                     <div className='flex justify-between font-medium text-white'>
-                                        <span>Total Estimated Cost:</span>
+                                        <span>估计总費用:</span>
                                         <span>${totalCost.toFixed(4)}</span>
                                     </div>
                                 </div>
@@ -167,7 +167,7 @@ function HistoryPanelImpl({
                                             variant='secondary'
                                             size='sm'
                                             className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
-                                            Close
+                                            关闭close
                                         </Button>
                                     </DialogClose>
                                 </DialogFooter>
@@ -181,14 +181,14 @@ function HistoryPanelImpl({
                         size='sm'
                         onClick={onClearHistory}
                         className='h-auto rounded-md px-2 py-1 text-white/60 hover:bg-white/10 hover:text-white'>
-                        Clear
+                        清空
                     </Button>
                 )}
             </CardHeader>
             <CardContent className='flex-grow overflow-y-auto p-4'>
                 {history.length === 0 ? (
                     <div className='flex h-full items-center justify-center text-white/40'>
-                        <p>Generated images will appear here.</p>
+                        <p>按生成的图像将出现在此处。</p>
                     </div>
                 ) : (
                     <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
@@ -240,7 +240,7 @@ function HistoryPanelImpl({
                                                 ) : (
                                                     <SparklesIcon size={12} />
                                                 )}
-                                                {item.mode === 'edit' ? 'Edit' : 'Create'}
+                                                {item.mode === 'edit' ? '编辑' : '创建'}
                                             </div>
                                             {isMultiImage && (
                                                 <div className='pointer-events-none absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[12px] text-white'>

@@ -33,7 +33,7 @@ export function ImageOutput({
     imageBatch,
     viewMode,
     onViewChange,
-    altText = 'Generated image output',
+    altText = '生成的图片输出',
     isLoading,
     onSendToEdit,
     currentMode,
@@ -78,7 +78,7 @@ export function ImageOutput({
                             {/* Overlay loader at bottom center */}
                             <div className='absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-white/80'>
                                 <Loader2 className='h-4 w-4 animate-spin' />
-                                <p className='text-sm'>Streaming...</p>
+                                <p className='text-sm'>流式处理中...</p>
                             </div>
                         </div>
                     ) : currentMode === 'edit' && baseImagePreviewUrl ? (
@@ -93,13 +93,13 @@ export function ImageOutput({
                             />
                             <div className='absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white/80'>
                                 <Loader2 className='mb-2 h-8 w-8 animate-spin' />
-                                <p>Editing image...</p>
+                                <p>编辑图像中...</p>
                             </div>
                         </div>
                     ) : (
                         <div className='flex flex-col items-center justify-center text-white/60'>
                             <Loader2 className='mb-2 h-8 w-8 animate-spin' />
-                            <p>Generating image...</p>
+                            <p>正在生成图像...</p>
                         </div>
                     )
                 ) : imageBatch && imageBatch.length > 0 ? (
@@ -132,12 +132,12 @@ export function ImageOutput({
                         />
                     ) : (
                         <div className='text-center text-white/40'>
-                            <p>Error displaying image.</p>
+                            <p>编辑图像时出错。</p>
                         </div>
                     )
                 ) : (
                     <div className='text-center text-white/40'>
-                        <p>Your generated image will appear here.</p>
+                        <p>你生成的图像将在此显示。</p>
                     </div>
                 )}
             </div>
@@ -155,7 +155,7 @@ export function ImageOutput({
                                     : 'text-white/50 hover:bg-white/10 hover:text-white/80'
                             )}
                             onClick={() => onViewChange('grid')}
-                            aria-label='Show grid view'>
+                            aria-label='显示网格视图'>
                             <Grid className='h-4 w-4' />
                         </Button>
                         {imageBatch.map((img, index) => (
@@ -170,7 +170,7 @@ export function ImageOutput({
                                         : 'opacity-60 hover:opacity-100'
                                 )}
                                 onClick={() => onViewChange(index)}
-                                aria-label={`Select image ${index + 1}`}>
+                                aria-label={`选择图像 ${index + 1}`}>
                                 <Image
                                     src={img.path}
                                     alt={`Thumbnail ${index + 1}`}
@@ -195,7 +195,7 @@ export function ImageOutput({
                         showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
                     )}>
                     <Send className='mr-2 h-4 w-4' />
-                    Send to Edit
+                    发送到编辑
                 </Button>
             </div>
         </div>
