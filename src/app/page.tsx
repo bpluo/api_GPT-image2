@@ -233,7 +233,7 @@ export default function HomePage() {
             }
 
             if (editImageFiles.length >= MAX_EDIT_IMAGES) {
-                alert(`Cannot paste: Maximum of ${MAX_EDIT_IMAGES} images reached.`);
+                alert(`无法粘贴：已附加最多 ${MAX_EDIT_IMAGES} 张图片。`);
                 return;
             }
 
@@ -273,7 +273,7 @@ export default function HomePage() {
 
     const handleSavePassword = async (password: string) => {
         if (!password.trim()) {
-            setError('Password cannot be empty.');
+            setError('密码不能为空。');
             return;
         }
         try {
@@ -287,7 +287,7 @@ export default function HomePage() {
             }
         } catch (e) {
             console.error('Error hashing password:', e);
-            setError('Failed to save password due to a hashing error.');
+            setError('由于哈希错訪，未能保存密码。');
         }
     };
 
@@ -317,7 +317,7 @@ export default function HomePage() {
         if (isPasswordRequiredByBackend && clientPasswordHash) {
             apiFormData.append('passwordHash', clientPasswordHash);
         } else if (isPasswordRequiredByBackend && !clientPasswordHash) {
-            setError('Password is required. Please configure the password by clicking the lock icon.');
+            setError('需要密码。請点击键率圖標配置密码。');
             setPasswordDialogContext('initial');
             setIsPasswordDialogOpen(true);
             setIsLoading(false);
@@ -539,7 +539,7 @@ export default function HomePage() {
 
             if (!response.ok) {
                 if (response.status === 401 && isPasswordRequiredByBackend) {
-                    setError('Unauthorized: Invalid or missing password. Please try again.');
+                    setError('未授樊：密码不正確或丢失。請再試一次。');
                     setPasswordDialogContext('retry');
                     setLastApiCallArgs([formData]);
                     setIsPasswordDialogOpen(true);
