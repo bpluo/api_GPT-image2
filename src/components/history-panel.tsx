@@ -319,6 +319,7 @@ function HistoryPanelImpl({
                                                         height={150}
                                                         className='h-full w-full rounded-xl object-cover'
                                                         unoptimized
+                                                        loading='lazy'
                                                     />
                                                 ) : (
                                                     <div className='flex h-full w-full items-center justify-center rounded-xl bg-neutral-800/60 text-neutral-500'>
