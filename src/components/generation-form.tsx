@@ -155,12 +155,12 @@ export function GenerationForm({
         size === 'custom' ? validateGptImage2Size(customWidth, customHeight) : { valid: true as const };
     const customSizeInvalid = size === 'custom' && !customSizeValidation.valid;
 
-    // Disable streaming when n > 1 (OpenAI limitation)
+    // Disable streaming when n > 1 or model is not gpt-image-2 (OpenAI limitation)
     React.useEffect(() => {
-        if (n[0] > 1 && enableStreaming) {
+        if ((n[0] > 1 || !isGptImage2) && enableStreaming) {
             setEnableStreaming(false);
         }
-    }, [n, enableStreaming, setEnableStreaming]);
+    }, [n, isGptImage2, enableStreaming, setEnableStreaming]);
 
     // 'custom' is only valid on gpt-image-2; reset when switching to a legacy model
     React.useEffect(() => {
@@ -255,7 +255,7 @@ export function GenerationForm({
                                             id='enable-streaming'
                                             checked={enableStreaming}
                                             onCheckedChange={(checked) => setEnableStreaming(!!checked)}
-                                            disabled={isLoading || n[0] > 1}
+                                            disabled={isLoading || n[0] > 1 || !isGptImage2}
                                             className='border-white/40 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black disabled:cursor-not-allowed disabled:opacity-50'
                                         />
                                         <Label
@@ -267,8 +267,10 @@ export function GenerationForm({
                                 </TooltipTrigger>
                                 <TooltipContent className='max-w-[250px]'>
                                     {n[0] > 1
-                                        ? '流式处理仅在生成1个图像(n=1)时支持。'
-                                        : '在生成1句中显示部分预览图像，会提供更具交互性的体验。'}
+                                        ? '流式处理仅在生成1张图(n=1)时支持。'
+                                        : !isGptImage2
+                                        ? '流式处理仅 gpt-image-2 模型支持。'
+                                        : '在生成过程中显示部分预览图像，提共更具交互性的体验。'}
                                 </TooltipContent>
                             </Tooltip>
                         </div>

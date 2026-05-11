@@ -325,8 +325,8 @@ export default function HomePage() {
         }
         apiFormData.append('mode', mode);
 
-        // Add streaming parameters if enabled
-        if (enableStreaming) {
+        // Add streaming parameters if enabled (only for gpt-image-2 generate mode)
+        if (enableStreaming && mode === 'generate' && (mode === 'generate' ? genModel : editModel) === 'gpt-image-2') {
             apiFormData.append('stream', 'true');
             apiFormData.append('partial_images', partialImages.toString());
         }
