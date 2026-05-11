@@ -29,12 +29,16 @@ import {
     Lock,
     LockOpen,
     HelpCircle,
-    SquareDashed
+    SquareDashed,
+    ChevronDown,
+    Sparkles as SparklesIcon,
+    Lightbulb
 } from 'lucide-react';
 import * as React from 'react';
 
 import type { GptImageModel } from '@/lib/cost-utils';
 import type { SizePreset } from '@/lib/size-utils';
+import { presetPromptCategories } from '@/lib/preset-prompts';
 
 export type GenerationFormData = {
     prompt: string;
@@ -326,6 +330,40 @@ export function GenerationForm({
                         <Label htmlFor='prompt' className='text-white'>
                             描述
                         </Label>
+                        {/* 预设提示词快捷选择 */}
+                        <div className='relative'>
+                            <select
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val) {
+                                        setPrompt(val);
+                                        e.target.value = '';
+                                    }
+                                }}
+                                value=''
+                                disabled={isLoading}
+                                className='mb-2 w-full appearance-none rounded-md border border-white/20 bg-black px-3 py-1.5 text-xs text-white/60 transition-colors hover:border-white/40 focus:border-white/50 focus:outline-none focus:ring-1 focus:ring-white/50'>
+                                <option value='' className='bg-black text-white/60'>
+                                    💡 选择预设提示词...
+                                </option>
+                                {presetPromptCategories.map((cat) => (
+                                    <optgroup
+                                        key={cat.id}
+                                        label={`${cat.emoji} ${cat.label}`}
+                                        className='bg-black text-white/80'>
+                                        {cat.prompts.map((p, i) => (
+                                            <option
+                                                key={`${cat.id}-${i}`}
+                                                value={p.text}
+                                                className='bg-black text-white/80'>
+                                                {p.title} — {p.text.slice(0, 40)}…
+                                            </option>
+                                        ))}
+                                    </optgroup>
+                                ))}
+                            </select>
+                            <ChevronDown className='pointer-events-none absolute right-2 top-1.5 h-3.5 w-3.5 text-white/40' />
+                        </div>
                         <Textarea
                             id='prompt'
                             placeholder='例如：一个宣传写实的猫宇航员浮动在太空中'
