@@ -23,9 +23,6 @@ import {
     DollarSign,
     Pencil,
     Sparkles as SparklesIcon,
-    HardDrive,
-    Database,
-    FileImage,
     Trash2
 } from 'lucide-react';
 import Image from 'next/image';
@@ -56,8 +53,6 @@ const calculateCost = (value: number, rate: number): string => {
     return isNaN(cost) ? 'N/A' : cost.toFixed(4);
 };
 
-const SESSION_GAP_MS = 30 * 60 * 1000; // 30 minutes
-
 type HistorySession = {
     id: string;
     items: HistoryMetadata[];
@@ -67,46 +62,65 @@ type HistorySession = {
     totalImages: number;
 };
 
-const formatSessionRange = (startTimestamp: number, endTimestamp: number): string => {
-    const formatter = new Intl.DateTimeFormat('zh-CN', {
-        month: 'numeric',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    });
-
-    if (startTimestamp === endTimestamp) return formatter.format(new Date(startTimestamp));
-    return `${formatter.format(new Date(startTimestamp))} - ${formatter.format(new Date(endTimestamp))}`;
-};
-
+/**
+ * 按「同一张图」的操作链分组：
+ * - generate 操作产生一个独立的组（其自身 filename 为新图的起点）
+ * - 后续 edit 操作的 images[*].filename 如果匹配某个组里任一 filename，则归入该组
+ * - 无法匹配的 edit 作为独立组
+ * 组内按时间升序排列，组之间按最新时间倒序。
+ */
 const groupHistoryBySession = (items: HistoryMetadata[]): HistorySession[] => {
-    const sorted = [...items].sort((a, b) => b.timestamp - a.timestamp);
+    const sorted = [...items].sort((a, b) => a.timestamp - b.timestamp);
     const sessions: HistorySession[] = [];
 
     for (const item of sorted) {
-        const last = sessions[sessions.length - 1];
         const cost = item.costDetails?.estimated_cost_usd ?? 0;
-        const images = item.images?.length ?? 0;
+        const imageCount = item.images?.length ?? 0;
+        const itemFilenames = new Set(item.images?.map((img) => img.filename) ?? []);
 
-        if (!last || last.startTimestamp - item.timestamp > SESSION_GAP_MS) {
+        if (item.mode === 'generate') {
             sessions.push({
                 id: `${item.timestamp}`,
                 items: [item],
                 startTimestamp: item.timestamp,
                 endTimestamp: item.timestamp,
                 totalCost: cost,
-                totalImages: images
+                totalImages: imageCount
             });
         } else {
-            last.items.push(item);
-            last.endTimestamp = item.timestamp;
-            last.totalCost += cost;
-            last.totalImages += images;
+            let matchedSession: HistorySession | null = null;
+            for (let i = sessions.length - 1; i >= 0; i--) {
+                const sessionFileNames = new Set(
+                    sessions[i].items.flatMap((si) => si.images?.map((img) => img.filename) ?? [])
+                );
+                for (const fn of itemFilenames) {
+                    if (sessionFileNames.has(fn)) {
+                        matchedSession = sessions[i];
+                        break;
+                    }
+                }
+                if (matchedSession) break;
+            }
+
+            if (matchedSession) {
+                matchedSession.items.push(item);
+                matchedSession.endTimestamp = item.timestamp;
+                matchedSession.totalCost += cost;
+                matchedSession.totalImages += imageCount;
+            } else {
+                sessions.push({
+                    id: `${item.timestamp}`,
+                    items: [item],
+                    startTimestamp: item.timestamp,
+                    endTimestamp: item.timestamp,
+                    totalCost: cost,
+                    totalImages: imageCount
+                });
+            }
         }
     }
 
-    return sessions;
+    return sessions.sort((a, b) => b.endTimestamp - a.endTimestamp);
 };
 
 function HistoryPanelImpl({
@@ -127,21 +141,33 @@ function HistoryPanelImpl({
     const [copiedTimestamp, setCopiedTimestamp] = React.useState<number | null>(null);
 
     const { totalCost, totalImages } = React.useMemo(() => {
-        let cost = 0;
-        let images = 0;
-        history.forEach((item) => {
-            if (item.costDetails) {
-                cost += item.costDetails.estimated_cost_usd;
-            }
+        let cost = 0, images = 0;
+        for (const item of history) {
+            if (item.costDetails) cost += item.costDetails.estimated_cost_usd;
             images += item.images?.length ?? 0;
-        });
-
-        return { totalCost: Math.round(cost * 10000) / 10000, totalImages: images };
+        }
+        return {
+            totalCost: Math.round(cost * 10000) / 10000,
+            totalImages: images
+        };
     }, [history]);
 
     const historySessions = React.useMemo(() => groupHistoryBySession(history), [history]);
-
     const averageCost = totalImages > 0 ? totalCost / totalImages : 0;
+
+    // 将所有 session 条目扁平化为单一数组，附带分组元数据（用于横向排列渲染）
+    const flatHistoryItems = React.useMemo(() => {
+        const items: { item: HistoryMetadata; sessionIdx: number; isFirst: boolean; genCount: number; editCount: number }[] = [];
+        for (let si = 0; si < historySessions.length; si++) {
+            const s = historySessions[si];
+            const genCount = s.items.filter(i => i.mode === 'generate').length;
+            const editCount = s.items.filter(i => i.mode === 'edit').length;
+            for (let ii = 0; ii < s.items.length; ii++) {
+                items.push({ item: s.items[ii], sessionIdx: si, isFirst: ii === 0, genCount, editCount });
+            }
+        }
+        return items;
+    }, [historySessions]);
 
     const handleCopy = async (text: string | null | undefined, timestamp: number) => {
         if (!text) return;
@@ -155,8 +181,8 @@ function HistoryPanelImpl({
     };
 
     return (
-        <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
-            <CardHeader className='flex flex-row items-center justify-between gap-4 border-b border-white/10 px-4 py-3'>
+        <Card className='flex w-full flex-col overflow-visible rounded-xl border border-white/5 bg-black/60 backdrop-blur-sm'>
+            <CardHeader className='flex flex-row items-center justify-between gap-4 border-b border-white/5 px-4 py-2.5'>
                 <div className='flex items-center gap-2'>
                     <CardTitle className='text-lg font-medium text-white'>历史记录</CardTitle>
                     {totalCost > 0 && (
@@ -240,345 +266,171 @@ function HistoryPanelImpl({
                     </Button>
                 )}
             </CardHeader>
-            <CardContent className='flex-grow overflow-y-auto p-4'>
+            <CardContent className='overflow-x-auto pb-4 pt-6'>
                 {history.length === 0 ? (
-                    <div className='flex h-full items-center justify-center text-white/40'>
-                        <p>按生成的图像将出现在此处。</p>
+                    <div className='flex h-full min-h-[100px] items-center justify-center text-white/40'>
+                        <p>生成的图像将出现在此处。</p>
                     </div>
                 ) : (
-                    <div className='space-y-4'>
-                        {historySessions.map((session) => (
-                            <div key={session.id}>
-                                <div className='mb-2 flex items-center justify-between text-xs text-neutral-400'>
-                                    <div>{formatSessionRange(session.startTimestamp, session.endTimestamp)}</div>
-                                    <div>
-                                        {session.totalImages} images · ${session.totalCost.toFixed(4)}
-                                    </div>
-                                </div>
-                                <div className='grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'>
-                                    {session.items.map((item) => {
-                                        const firstImage = item.images?.[0];
-                                        const imageCount = item.images?.length ?? 0;
-                                        const isMultiImage = imageCount > 1;
-                                        const itemKey = item.timestamp;
-                                        const originalStorageMode = item.storageModeUsed || 'fs';
-                                        const outputFormat = item.output_format || 'png';
+                    <div className='pb-4'>
+                        <div className='flex min-w-max gap-3'>
+                            {(() => {
+                                return flatHistoryItems.map(({ item, isFirst, genCount, editCount }) => {
+                                    const firstImage = item.images?.[0];
+                                    const imageCount = item.images?.length ?? 0;
+                                    const isMultiImage = imageCount > 1;
+                                    const itemKey = item.timestamp;
+                                    const storageMode = item.storageModeUsed || 'fs';
+                                    const thumbUrl = firstImage
+                                        ? storageMode === 'indexeddb'
+                                            ? getImageSrc(firstImage.filename)
+                                            : `/api/image/${firstImage.filename}`
+                                        : undefined;
 
-                                        let thumbnailUrl: string | undefined;
-                                        if (firstImage) {
-                                            if (originalStorageMode === 'indexeddb') {
-                                                thumbnailUrl = getImageSrc(firstImage.filename);
-                                            } else {
-                                                thumbnailUrl = `/api/image/${firstImage.filename}`;
-                                            }
-                                        }
-
-                                        return (
-                                            <div key={itemKey} className='flex flex-col'>
-                                                <div className='group relative'>
-                                                    <button
-                                                        onClick={() => onSelectImage(item)}
-                                                        className='relative block aspect-square w-full overflow-hidden rounded-t-md border border-white/20 transition-all duration-150 group-hover:border-white/40 focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black focus:outline-none'
-                                                        aria-label={`View image batch from ${new Date(item.timestamp).toLocaleString()}`}>
-                                                        {thumbnailUrl ? (
-                                                            <Image
-                                                                src={thumbnailUrl}
-                                                                alt={`Preview for batch generated at ${new Date(item.timestamp).toLocaleString()}`}
-                                                                width={150}
-                                                                height={150}
-                                                                className='h-full w-full object-cover'
-                                                                unoptimized
-                                                            />
-                                                        ) : (
-                                                            <div className='flex h-full w-full items-center justify-center bg-neutral-800 text-neutral-500'>
-                                                                ?
-                                                            </div>
-                                                        )}
-                                                        <div
-                                                            className={cn(
-                                                                'pointer-events-none absolute top-1 left-1 z-10 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] text-white',
-                                                                item.mode === 'edit' ? 'bg-orange-600/80' : 'bg-blue-600/80'
-                                                            )}>
-                                                            {item.mode === 'edit' ? (
-                                                                <Pencil size={12} />
-                                                            ) : (
-                                                                <SparklesIcon size={12} />
-                                                            )}
-                                                            {item.mode === 'edit' ? '编辑' : '创建'}
-                                                        </div>
-                                                        {isMultiImage && (
-                                                            <div className='pointer-events-none absolute right-1 bottom-1 z-10 flex items-center gap-1 rounded-full bg-black/70 px-1.5 py-0.5 text-[12px] text-white'>
-                                                                <Layers size={16} />
-                                                                {imageCount}
-                                                            </div>
-                                                        )}
-                                                        <div className='pointer-events-none absolute bottom-1 left-1 z-10 flex items-center gap-1'>
-                                                            <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
-                                                                {originalStorageMode === 'fs' ? (
-                                                                    <HardDrive size={12} className='text-neutral-400' />
-                                                                ) : (
-                                                                    <Database size={12} className='text-blue-400' />
-                                                                )}
-                                                                <span>{originalStorageMode === 'fs' ? 'file' : 'db'}</span>
-                                                            </div>
-                                                            {item.output_format && (
-                                                                <div className='flex items-center gap-1 rounded-full border border-white/10 bg-neutral-900/80 px-1 py-0.5 text-[11px] text-white/70'>
-                                                                    <FileImage size={12} className='text-neutral-400' />
-                                                                    <span>{outputFormat.toUpperCase()}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </button>
+                                    return (
+                                        <div
+                                            key={itemKey}
+                                            className='group relative w-24 shrink-0 transition-all duration-200 hover:z-50 hover:scale-[1.3] sm:w-28 md:w-32'>
+                                            {isFirst && (
+                                                <div className='absolute -top-4 left-1/2 z-30 -translate-x-1/2'>
+                                                    <div className='whitespace-nowrap rounded-full bg-neutral-800/90 px-2.5 py-0.5 text-[10px] text-neutral-400 leading-tight border border-white/[0.06] shadow-lg backdrop-blur-sm'>
+                                                        <span className={genCount > 0 ? 'text-blue-400' : 'text-orange-400'}>
+                                                            {genCount > 0 ? '✦ 创建' : '✎ 编辑'}
+                                                        </span>
+                                                        {editCount > 0 && <span className='text-orange-400/70 ml-1'>+{editCount}</span>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={() => onSelectImage(item)}
+                                                className={cn(
+                                                    'relative mt-4 block aspect-square w-full rounded-xl border shadow-sm transition-all duration-300 group-hover:border-white/40 group-hover:shadow-2xl group-hover:shadow-white/15 focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-black focus:outline-none',
+                                                    'bg-white/[0.03]',
+                                                    genCount > 0
+                                                        ? 'border-blue-500/15 hover:border-blue-400/40'
+                                                        : 'border-orange-500/15 hover:border-orange-400/40'
+                                                )}
+                                                aria-label={`查看 ${new Date(item.timestamp).toLocaleString()} 的图片`}>
+                                                {thumbUrl ? (
+                                                    <Image
+                                                        src={thumbUrl}
+                                                        alt={`预览 ${new Date(item.timestamp).toLocaleString()}`}
+                                                        width={150}
+                                                        height={150}
+                                                        className='h-full w-full rounded-xl object-cover'
+                                                        unoptimized
+                                                    />
+                                                ) : (
+                                                    <div className='flex h-full w-full items-center justify-center rounded-xl bg-neutral-800/60 text-neutral-500'>
+                                                        ?
+                                                    </div>
+                                                )}
+                                                <div className={cn('pointer-events-none absolute left-1 top-1 z-10 flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] text-white font-medium leading-none shadow-sm backdrop-blur-sm', item.mode === 'edit' ? 'bg-orange-500/70' : 'bg-blue-500/70')}>
+                                                    {item.mode === 'edit' ? <Pencil size={10} /> : <SparklesIcon size={10} />}
+                                                    {item.mode === 'edit' ? '编辑' : '创建'}
+                                                </div>
+                                                {isMultiImage && (
+                                                    <div className='pointer-events-none absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white leading-none backdrop-blur-sm'>
+                                                        <Layers size={10} />{imageCount}
+                                                    </div>
+                                                )}
+                                                <div className='pointer-events-none absolute bottom-1 right-1 z-10 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] text-white/70 leading-none backdrop-blur-sm'>
+                                                    {formatDuration(item.durationMs)}
+                                                </div>
+                                                {/* 悬浮时渐变遮罩 */}
+                                                <div className='pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100' />
+                                            </button>
+                                            <div className='pointer-events-none absolute inset-x-0 bottom-0 z-30 flex translate-y-1 flex-col gap-1 p-1.5 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100'>
+                                                <div className='overflow-hidden rounded-lg bg-black/80 px-2 py-1 text-[10px] text-white/80 leading-tight truncate ring-1 ring-white/10 backdrop-blur-sm'>
+                                                    {item.prompt || '未记录提示词'}
+                                                </div>
+                                                <div className='flex items-center justify-center gap-1.5'>
+                                                    {/* P button prompt dialog */}
+                                                    <Dialog open={openPromptDialogTimestamp === itemKey} onOpenChange={(o) => !o && setOpenPromptDialogTimestamp(null)}>
+                                                        <DialogTrigger asChild>
+                                                            <button className='pointer-events-auto flex h-6 w-6 items-center justify-center rounded-lg bg-white/10 text-[11px] text-white/80 transition-all duration-200 hover:bg-white/25 hover:text-white hover:scale-110 leading-none ring-1 ring-white/10' onClick={(e) => { e.stopPropagation(); setOpenPromptDialogTimestamp(itemKey); }} aria-label='查看提示词'>P</button>
+                                                        </DialogTrigger>
+                                                        <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[625px]'>
+                                                            <DialogHeader>
+                                                                <DialogTitle className='text-white'>提示词</DialogTitle>
+                                                                <DialogDescription className='sr-only'>用于生成这批图像的完整提示词。</DialogDescription>
+                                                            </DialogHeader>
+                                                            <div className='max-h-[400px] overflow-y-auto rounded-md border border-neutral-600 bg-neutral-800 p-3 py-4 text-sm text-neutral-300'>{item.prompt || '未记录提示词。'}</div>
+                                                            <DialogFooter>
+                                                                <Button variant='outline' size='sm' onClick={() => handleCopy(item.prompt, itemKey)} className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
+                                                                    {copiedTimestamp === itemKey ? <Check className='mr-2 h-4 w-4 text-green-400' /> : <Copy className='mr-2 h-4 w-4' />}
+                                                                    {copiedTimestamp === itemKey ? '已复制!' : '复制'}
+                                                                </Button>
+                                                                <DialogClose asChild>
+                                                                    <Button type='button' variant='secondary' size='sm' className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>关闭</Button>
+                                                                </DialogClose>
+                                                            </DialogFooter>
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                    {/* Cost button */}
                                                     {item.costDetails && (
-                                                        <Dialog
-                                                            open={openCostDialogTimestamp === itemKey}
-                                                            onOpenChange={(isOpen) => !isOpen && setOpenCostDialogTimestamp(null)}>
+                                                        <Dialog open={openCostDialogTimestamp === itemKey} onOpenChange={(o) => !o && setOpenCostDialogTimestamp(null)}>
                                                             <DialogTrigger asChild>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setOpenCostDialogTimestamp(itemKey);
-                                                                    }}
-                                                                    className='absolute top-1 right-1 z-20 flex items-center gap-0.5 rounded-full bg-green-600/80 px-1.5 py-0.5 text-[11px] text-white transition-colors hover:bg-green-500/90'
-                                                                    aria-label='Show cost breakdown'>
-                                                                    <DollarSign size={12} />
-                                                                    {item.costDetails.estimated_cost_usd.toFixed(4)}
+                                                                <button onClick={(e) => { e.stopPropagation(); setOpenCostDialogTimestamp(itemKey); }} className='pointer-events-auto flex h-6 items-center gap-1 rounded-lg bg-green-600/70 px-1.5 text-[10px] text-white transition-all duration-200 hover:bg-green-500/90 hover:scale-110 leading-none ring-1 ring-green-400/20' aria-label='查看费用明细'>
+                                                                    <DollarSign size={10} />{item.costDetails.estimated_cost_usd.toFixed(4)}
                                                                 </button>
                                                             </DialogTrigger>
                                                             <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[450px]'>
                                                                 <DialogHeader>
-                                                                    <DialogTitle className='text-white'>Cost Breakdown</DialogTitle>
-                                                                    <DialogDescription className='sr-only'>
-                                                                        Estimated cost breakdown for this image generation.
-                                                                    </DialogDescription>
+                                                                    <DialogTitle className='text-white'>费用明细</DialogTitle>
+                                                                    <DialogDescription className='sr-only'>此次图像生成的估计费用明细。</DialogDescription>
                                                                 </DialogHeader>
                                                                 {(() => {
-                                                                    const modelForRates: GptImageModel = (item.model ||
-                                                                        'gpt-image-1') as GptImageModel;
-                                                                    const rates = getModelRates(modelForRates);
-                                                                    return (
-                                                                        <>
-                                                                            <div className='space-y-1 pt-1 text-xs text-neutral-400'>
-                                                                                <p>Pricing for {modelForRates}:</p>
-                                                                                <ul className='list-disc pl-4'>
-                                                                                    <li>
-                                                                                        Text Input: ${rates.textInputPerMillion} /
-                                                                                        1M tokens
-                                                                                    </li>
-                                                                                    <li>
-                                                                                        Image Input: ${rates.imageInputPerMillion} /
-                                                                                        1M tokens
-                                                                                    </li>
-                                                                                    <li>
-                                                                                        Image Output: $
-                                                                                        {rates.imageOutputPerMillion} / 1M tokens
-                                                                                    </li>
-                                                                                </ul>
-                                                                            </div>
-                                                                            <div className='space-y-2 py-4 text-sm text-neutral-300'>
-                                                                                <div className='flex justify-between'>
-                                                                                    <span>Text Input Tokens:</span>{' '}
-                                                                                    <span>
-                                                                                        {item.costDetails.text_input_tokens.toLocaleString()}{' '}
-                                                                                        (~$
-                                                                                        {calculateCost(
-                                                                                            item.costDetails.text_input_tokens,
-                                                                                            rates.textInputPerToken
-                                                                                        )}
-                                                                                        )
-                                                                                    </span>
-                                                                                </div>
-                                                                                {item.costDetails.image_input_tokens > 0 && (
-                                                                                    <div className='flex justify-between'>
-                                                                                        <span>Image Input Tokens:</span>{' '}
-                                                                                        <span>
-                                                                                            {item.costDetails.image_input_tokens.toLocaleString()}{' '}
-                                                                                            (~$
-                                                                                            {calculateCost(
-                                                                                                item.costDetails
-                                                                                                    .image_input_tokens,
-                                                                                                rates.imageInputPerToken
-                                                                                            )}
-                                                                                            )
-                                                                                        </span>
-                                                                                    </div>
-                                                                                )}
-                                                                                <div className='flex justify-between'>
-                                                                                    <span>Image Output Tokens:</span>{' '}
-                                                                                    <span>
-                                                                                        {item.costDetails.image_output_tokens.toLocaleString()}{' '}
-                                                                                        (~$
-                                                                                        {calculateCost(
-                                                                                            item.costDetails.image_output_tokens,
-                                                                                            rates.imageOutputPerToken
-                                                                                        )}
-                                                                                        )
-                                                                                    </span>
-                                                                                </div>
-                                                                                <hr className='my-2 border-neutral-700' />
-                                                                                <div className='flex justify-between font-medium text-white'>
-                                                                                    <span>Total Estimated Cost:</span>
-                                                                                    <span>
-                                                                                        ${item.costDetails.estimated_cost_usd.toFixed(4)}
-                                                                                    </span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </>
-                                                                    );
+                                                                    const m: GptImageModel = (item.model || 'gpt-image-1') as GptImageModel;
+                                                                    const r = getModelRates(m);
+                                                                    return (<>
+                                                                        <div className='space-y-1 pt-1 text-xs text-neutral-400'>
+                                                                            <p>{m} 定价:</p>
+                                                                            <ul className='list-disc pl-4'>
+                                                                                <li>文本输入: ${r.textInputPerMillion} / 100万 tokens</li>
+                                                                                <li>图像输入: ${r.imageInputPerMillion} / 100万 tokens</li>
+                                                                                <li>图像输出: ${r.imageOutputPerMillion} / 100万 tokens</li>
+                                                                            </ul>
+                                                                        </div>
+                                                                        <div className='space-y-2 py-4 text-sm text-neutral-300'>
+                                                                            <div className='flex justify-between'><span>文本输入令牌:</span><span>{item.costDetails.text_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.text_input_tokens, r.textInputPerToken)})</span></div>
+                                                                            {item.costDetails.image_input_tokens > 0 && <div className='flex justify-between'><span>图像输入令牌:</span><span>{item.costDetails.image_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_input_tokens, r.imageInputPerToken)})</span></div>}
+                                                                            <div className='flex justify-between'><span>图像输出令牌:</span><span>{item.costDetails.image_output_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_output_tokens, r.imageOutputPerToken)})</span></div>
+                                                                            <hr className='my-2 border-neutral-700' />
+                                                                            <div className='flex justify-between font-medium text-white'><span>估计总费用:</span><span>${item.costDetails.estimated_cost_usd.toFixed(4)}</span></div>
+                                                                        </div>
+                                                                    </>);
                                                                 })()}
                                                                 <DialogFooter>
-                                                                    <DialogClose asChild>
-                                                                        <Button
-                                                                            type='button'
-                                                                            variant='secondary'
-                                                                            size='sm'
-                                                                            className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
-                                                                            Close
-                                                                        </Button>
-                                                                    </DialogClose>
+                                                                    <DialogClose asChild><Button type='button' variant='secondary' size='sm' className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>关闭</Button></DialogClose>
                                                                 </DialogFooter>
                                                             </DialogContent>
                                                         </Dialog>
                                                     )}
-                                                </div>
-
-                                                <div className='space-y-1 rounded-b-md border border-t-0 border-neutral-700 bg-black p-2 text-xs text-white/60'>
-                                                    <p title={`Generated on: ${new Date(item.timestamp).toLocaleString()}`}>
-                                                        <span className='font-medium text-white/80'>Time:</span>{' '}
-                                                        {formatDuration(item.durationMs)}
-                                                    </p>
-                                                    <p>
-                                                        <span className='font-medium text-white/80'>Model:</span> {item.model || 'gpt-image-1'}
-                                                    </p>
-                                                    <p>
-                                                        <span className='font-medium text-white/80'>Quality:</span> {item.quality}
-                                                    </p>
-                                                    <p>
-                                                        <span className='font-medium text-white/80'>BG:</span> {item.background}
-                                                    </p>
-                                                    <p>
-                                                        <span className='font-medium text-white/80'>Mod:</span> {item.moderation}
-                                                    </p>
-                                                    <div className='mt-2 flex items-center gap-1'>
-                                                        <Dialog
-                                                            open={openPromptDialogTimestamp === itemKey}
-                                                            onOpenChange={(isOpen) =>
-                                                                !isOpen && setOpenPromptDialogTimestamp(null)
-                                                            }>
-                                                            <DialogTrigger asChild>
-                                                                <Button
-                                                                    variant='outline'
-                                                                    size='sm'
-                                                                    className='h-6 flex-grow border-white/20 px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white'
-                                                                    onClick={() => setOpenPromptDialogTimestamp(itemKey)}>
-                                                                    Show Prompt
-                                                                </Button>
-                                                            </DialogTrigger>
-                                                            <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-[625px]'>
-                                                                <DialogHeader>
-                                                                    <DialogTitle className='text-white'>Prompt</DialogTitle>
-                                                                    <DialogDescription className='sr-only'>
-                                                                        The full prompt used to generate this image batch.
-                                                                    </DialogDescription>
-                                                                </DialogHeader>
-                                                                <div className='max-h-[400px] overflow-y-auto rounded-md border border-neutral-600 bg-neutral-800 p-3 py-4 text-sm text-neutral-300'>
-                                                                    {item.prompt || 'No prompt recorded.'}
-                                                                </div>
-                                                                <DialogFooter>
-                                                                    <Button
-                                                                        variant='outline'
-                                                                        size='sm'
-                                                                        onClick={() => handleCopy(item.prompt, itemKey)}
-                                                                        className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
-                                                                        {copiedTimestamp === itemKey ? (
-                                                                            <Check className='mr-2 h-4 w-4 text-green-400' />
-                                                                        ) : (
-                                                                            <Copy className='mr-2 h-4 w-4' />
-                                                                        )}
-                                                                        {copiedTimestamp === itemKey ? 'Copied!' : 'Copy'}
-                                                                    </Button>
-                                                                    <DialogClose asChild>
-                                                                        <Button
-                                                                            type='button'
-                                                                            variant='secondary'
-                                                                            size='sm'
-                                                                            className='bg-neutral-700 text-neutral-200 hover:bg-neutral-600'>
-                                                                            Close
-                                                                        </Button>
-                                                                    </DialogClose>
-                                                                </DialogFooter>
-                                                            </DialogContent>
-                                                        </Dialog>
-                                                        <Dialog
-                                                            open={itemPendingDeleteConfirmation?.timestamp === item.timestamp}
-                                                            onOpenChange={(isOpen) => {
-                                                                if (!isOpen) onCancelDeletion();
-                                                            }}>
-                                                            <DialogTrigger asChild>
-                                                                <Button
-                                                                    className='h-6 w-6 bg-red-700/60 text-white hover:bg-red-600/60'
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        onDeleteItemRequest(item);
-                                                                    }}
-                                                                    aria-label='Delete history item'>
-                                                                    <Trash2 size={14} />
-                                                                </Button>
-                                                            </DialogTrigger>
-                                                            <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-md'>
-                                                                <DialogHeader>
-                                                                    <DialogTitle className='text-white'>
-                                                                        Confirm Deletion
-                                                                    </DialogTitle>
-                                                                    <DialogDescription className='pt-2 text-neutral-300'>
-                                                                        Are you sure you want to delete this history entry? This
-                                                                        will remove {item.images.length} image(s). This action
-                                                                        cannot be undone.
-                                                                    </DialogDescription>
-                                                                </DialogHeader>
-                                                                <div className='flex items-center space-x-2 py-2'>
-                                                                    <Checkbox
-                                                                        id={`dont-ask-${item.timestamp}`}
-                                                                        checked={deletePreferenceDialogValue}
-                                                                        onCheckedChange={(checked) =>
-                                                                            onDeletePreferenceDialogChange(!!checked)
-                                                                        }
-                                                                        className='border-neutral-400 bg-white data-[state=checked]:border-neutral-700 data-[state=checked]:bg-white data-[state=checked]:text-black dark:border-neutral-500 dark:!bg-white'
-                                                                    />
-                                                                    <label
-                                                                        htmlFor={`dont-ask-${item.timestamp}`}
-                                                                        className='text-sm leading-none font-medium text-neutral-300 peer-disabled:cursor-not-allowed peer-disabled:opacity-70'>
-                                                                        Don&apos;t ask me again
-                                                                    </label>
-                                                                </div>
-                                                                <DialogFooter className='gap-2 sm:justify-end'>
-                                                                    <Button
-                                                                        type='button'
-                                                                        variant='outline'
-                                                                        size='sm'
-                                                                        onClick={onCancelDeletion}
-                                                                        className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>
-                                                                        Cancel
-                                                                    </Button>
-                                                                    <Button
-                                                                        type='button'
-                                                                        variant='destructive'
-                                                                        size='sm'
-                                                                        onClick={onConfirmDeletion}
-                                                                        className='bg-red-600 text-white hover:bg-red-500'>
-                                                                        Delete
-                                                                    </Button>
-                                                                </DialogFooter>
-                                                            </DialogContent>
-                                                        </Dialog>
-                                                    </div>
+                                                    {/* Delete button */}
+                                                    <Dialog open={itemPendingDeleteConfirmation?.timestamp === item.timestamp} onOpenChange={(o) => { if (!o) onCancelDeletion(); }}>
+                                                        <DialogTrigger asChild>
+                                                            <button className='pointer-events-auto flex h-6 w-6 items-center justify-center rounded-lg bg-red-700/50 text-white/80 transition-all duration-200 hover:bg-red-500/70 hover:text-white hover:scale-110 leading-none ring-1 ring-red-500/20' onClick={(e) => { e.stopPropagation(); onDeleteItemRequest(item); }} aria-label='删除历史条目'><Trash2 size={12} /></button>
+                                                        </DialogTrigger>
+                                                        <DialogContent className='border-neutral-700 bg-neutral-900 text-white sm:max-w-md'>
+                                                            <DialogHeader><DialogTitle className='text-white'>确认删除</DialogTitle><DialogDescription className='pt-2 text-neutral-300'>确定要删除此历史记录？将移除 {item.images.length} 张图片。此操作不可撤销。</DialogDescription></DialogHeader>
+                                                            <div className='flex items-center space-x-2 py-2'>
+                                                                <Checkbox id={`dont-ask-${item.timestamp}`} checked={deletePreferenceDialogValue} onCheckedChange={(c) => onDeletePreferenceDialogChange(!!c)} className='border-neutral-400 bg-white data-[state=checked]:border-neutral-700 data-[state=checked]:bg-white data-[state=checked]:text-black dark:border-neutral-500 dark:!bg-white' />
+                                                                <label htmlFor={`dont-ask-${item.timestamp}`} className='text-xs leading-none font-medium text-neutral-300 peer-disabled:cursor-not-allowed peer-disabled:opacity-70'>不再询问</label>
+                                                            </div>
+                                                            <DialogFooter className='gap-2 sm:justify-end'>
+                                                                <Button type='button' variant='outline' size='sm' onClick={onCancelDeletion} className='border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-white'>取消</Button>
+                                                                <Button type='button' variant='destructive' size='sm' onClick={onConfirmDeletion} className='bg-red-600 text-white hover:bg-red-500'>删除</Button>
+                                                            </DialogFooter>
+                                                        </DialogContent>
+                                                    </Dialog>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
+                                        </div>
+                                    );
+                                });
+                            })()}
+                        </div>
                     </div>
                 )}
             </CardContent>

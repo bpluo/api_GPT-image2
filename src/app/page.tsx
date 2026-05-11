@@ -863,22 +863,23 @@ export default function HomePage() {
     }, []);
 
     return (
-        <main className='flex min-h-screen flex-col items-center bg-black p-4 text-white md:p-8 lg:p-12'>
+        <main className='flex min-h-screen flex-col items-center bg-gradient-to-b from-zinc-950 via-black to-zinc-950 p-3 text-white md:p-4 lg:p-6'>
             <PasswordDialog
                 isOpen={isPasswordDialogOpen}
                 onOpenChange={setIsPasswordDialogOpen}
                 onSave={handleSavePassword}
-                title={passwordDialogContext === 'retry' ? 'Password Required' : 'Configure Password'}
+                title={passwordDialogContext === 'retry' ? '需要密码' : '配置密码'}
                 description={
                     passwordDialogContext === 'retry'
-                        ? 'The server requires a password, or the previous one was incorrect. Please enter it to continue.'
-                        : 'Set a password to use for API requests.'
+                        ? '服务器需要密码，或之前输入的密码不正确。请重新输入。'
+                        : '设置用于 API 请求的密码。'
                 }
             />
-            <div className='w-full max-w-screen-2xl space-y-6'>
-                <div className='grid grid-cols-1 gap-6 lg:grid-cols-2'>
-                    <div className='relative flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
-                        <div className={mode === 'generate' ? 'block h-full w-full' : 'hidden'}>
+            <div className='mx-auto w-full max-w-[1460px] space-y-5'>
+                <div className='flex min-h-[62vh] items-center'>
+                    <div className='grid w-full grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5'>
+                        <div className='relative flex h-[58vh] min-h-[480px] flex-col lg:col-span-1'>
+                            <div className={mode === 'generate' ? 'block h-full w-full' : 'hidden'}>
                             <GenerationForm
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading}
@@ -914,9 +915,9 @@ export default function HomePage() {
                                 partialImages={partialImages}
                                 setPartialImages={setPartialImages}
                             />
-                        </div>
-                        <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
-                            <EditingForm
+                            </div>
+                            <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
+                                <EditingForm
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading || isSendingToEdit}
                                 currentMode={mode}
@@ -961,31 +962,32 @@ export default function HomePage() {
                                 setEnableStreaming={setEnableStreaming}
                                 partialImages={partialImages}
                                 setPartialImages={setPartialImages}
+                                />
+                            </div>
+                        </div>
+                        <div className='flex h-[58vh] min-h-[480px] flex-col lg:col-span-1'>
+                            {error && (
+                                <Alert variant='destructive' className='mb-3 border-red-500/50 bg-red-900/20 text-red-300'>
+                                    <AlertTitle className='text-red-200'>错误</AlertTitle>
+                                    <AlertDescription>{error}</AlertDescription>
+                                </Alert>
+                            )}
+                            <ImageOutput
+                                imageBatch={latestImageBatch}
+                                viewMode={imageOutputView}
+                                onViewChange={setImageOutputView}
+                                altText='Generated image output'
+                                isLoading={isLoading || isSendingToEdit}
+                                onSendToEdit={handleSendToEdit}
+                                currentMode={mode}
+                                baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
+                                streamingPreviewImages={streamingPreviewImages}
                             />
                         </div>
                     </div>
-                    <div className='flex h-[70vh] min-h-[600px] flex-col lg:col-span-1'>
-                        {error && (
-                            <Alert variant='destructive' className='mb-4 border-red-500/50 bg-red-900/20 text-red-300'>
-                                <AlertTitle className='text-red-200'>Error</AlertTitle>
-                                <AlertDescription>{error}</AlertDescription>
-                            </Alert>
-                        )}
-                        <ImageOutput
-                            imageBatch={latestImageBatch}
-                            viewMode={imageOutputView}
-                            onViewChange={setImageOutputView}
-                            altText='Generated image output'
-                            isLoading={isLoading || isSendingToEdit}
-                            onSendToEdit={handleSendToEdit}
-                            currentMode={mode}
-                            baseImagePreviewUrl={editSourceImagePreviewUrls[0] || null}
-                            streamingPreviewImages={streamingPreviewImages}
-                        />
-                    </div>
                 </div>
 
-                <div className='min-h-[450px]'>
+                <div className='min-h-[220px]'>
                     <HistoryPanel
                         history={history}
                         onSelectImage={handleHistorySelect}
