@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Skill(diagnose)",
+      "Skill(diagnose:*)",
+      "WebFetch(domain:localhost)"
+    ]
+  }
+}

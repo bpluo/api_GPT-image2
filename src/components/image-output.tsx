@@ -1,9 +1,10 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Loader2, Send, Grid } from 'lucide-react';
-import Image from 'next/image';
+import { Grid, ImageIcon, Loader2, Send } from 'lucide-react';
 
 type ImageInfo = {
     path: string;
@@ -25,7 +26,6 @@ type ImageOutputProps = {
 const getGridColsClass = (count: number): string => {
     if (count <= 1) return 'grid-cols-1';
     if (count <= 4) return 'grid-cols-2';
-    if (count <= 9) return 'grid-cols-3';
     return 'grid-cols-3';
 };
 
@@ -41,8 +41,7 @@ export function ImageOutput({
     streamingPreviewImages
 }: ImageOutputProps) {
     const handleSendClick = () => {
-        // Send to edit only works when a single image is selected
-        if (typeof viewMode === 'number' && imageBatch && imageBatch[viewMode]) {
+        if (typeof viewMode === 'number' && imageBatch?.[viewMode]) {
             onSendToEdit(imageBatch[viewMode].filename);
         }
     };
@@ -52,108 +51,106 @@ export function ImageOutput({
     const canSendToEdit = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode];
 
     return (
-        <div className='flex h-full min-h-[300px] w-full flex-col items-center justify-between gap-4 overflow-hidden rounded-lg border border-white/20 bg-black p-4'>
-            <div className='relative flex h-full w-full flex-grow items-center justify-center overflow-hidden'>
+        <div className='flex h-full min-h-[320px] w-full flex-col overflow-hidden rounded-3xl border border-border/70 bg-card/70 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl'>
+            <div className='mb-3 flex items-center justify-between gap-3 px-1'>
+                <div>
+                    <p className='text-sm font-medium'>输出预览</p>
+                    <p className='text-xs text-muted-foreground'>{isLoading ? '正在处理图像' : imageBatch?.length ? `${imageBatch.length} 张图片` : '等待生成结果'}</p>
+                </div>
+                <div className='rounded-full border border-border bg-background/40 px-3 py-1 text-xs text-muted-foreground'>
+                    {currentMode === 'edit' ? '编辑模式' : '生成模式'}
+                </div>
+            </div>
+
+            <div className='relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-2xl border border-border/70 bg-background/45'>
+                <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_40%)]' />
                 {isLoading ? (
                     streamingPreviewImages && streamingPreviewImages.size > 0 ? (
-                        // Show streaming preview images - single image centered like final view
-                        <div className='relative flex h-full w-full items-center justify-center'>
-                            {/* Show the latest preview image (highest index) */}
+                        <div className='relative flex h-full w-full items-center justify-center p-4'>
                             {(() => {
                                 const entries = Array.from(streamingPreviewImages.entries());
                                 const latestEntry = entries[entries.length - 1];
                                 if (!latestEntry) return null;
                                 const [, dataUrl] = latestEntry;
                                 return (
-                                    <Image
+                                    <img
                                         src={dataUrl}
-                                        alt='Streaming preview'
-                                        width={512}
-                                        height={512}
-                                        className='max-h-full max-w-full object-contain'
-                                        unoptimized
+                                        alt='流式预览'
+                                        className='max-h-full max-w-full rounded-2xl object-contain shadow-2xl shadow-black/30'
                                     />
                                 );
                             })()}
-                            {/* Overlay loader at bottom center */}
-                            <div className='absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-white/80'>
+                            <div className='absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/85 px-4 py-2 text-sm text-foreground shadow-lg backdrop-blur'>
                                 <Loader2 className='h-4 w-4 animate-spin' />
-                                <p className='text-sm'>流式处理中...</p>
+                                <span>流式预览生成中</span>
                             </div>
                         </div>
                     ) : currentMode === 'edit' && baseImagePreviewUrl ? (
                         <div className='relative flex h-full w-full items-center justify-center'>
-                            <Image
+                            <img
                                 src={baseImagePreviewUrl}
-                                alt='Base image for editing'
-                                fill
-                                style={{ objectFit: 'contain' }}
-                                className='blur-md filter'
-                                unoptimized
+                                alt='编辑底图'
+                                className='h-full w-full object-contain blur-md filter'
                             />
-                            <div className='absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white/80'>
-                                <Loader2 className='mb-2 h-8 w-8 animate-spin' />
-                                <p>编辑图像中...</p>
+                            <div className='absolute inset-0 flex flex-col items-center justify-center bg-background/70 text-foreground backdrop-blur-sm'>
+                                <Loader2 className='mb-3 h-9 w-9 animate-spin' />
+                                <p className='font-medium'>正在编辑图像</p>
+                                <p className='mt-1 text-xs text-muted-foreground'>保留原图结构并应用新的提示词</p>
                             </div>
                         </div>
                     ) : (
-                        <div className='flex flex-col items-center justify-center text-white/60'>
-                            <Loader2 className='mb-2 h-8 w-8 animate-spin' />
-                            <p>正在生成图像...</p>
+                        <div className='flex flex-col items-center justify-center text-muted-foreground'>
+                            <Loader2 className='mb-3 h-9 w-9 animate-spin' />
+                            <p className='font-medium text-foreground'>正在生成图像</p>
+                            <p className='mt-1 text-xs'>结果会自动写入历史记录</p>
                         </div>
                     )
                 ) : imageBatch && imageBatch.length > 0 ? (
                     viewMode === 'grid' ? (
-                        <div
-                            className={`grid ${getGridColsClass(imageBatch.length)} max-h-full w-full max-w-full gap-1 p-1`}>
+                        <div className={`grid ${getGridColsClass(imageBatch.length)} h-full max-h-full w-full gap-2 p-3`}>
                             {imageBatch.map((img, index) => (
-                                <div
+                                <button
+                                    type='button'
                                     key={img.filename}
-                                    className='relative aspect-square overflow-hidden rounded border border-white/10'>
-                                    <Image
+                                    onClick={() => onViewChange(index)}
+                                    className='relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted/20 transition hover:-translate-y-0.5 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring'>
+                                    <img
                                         src={img.path}
-                                        alt={`Generated image ${index + 1}`}
-                                        fill
-                                        style={{ objectFit: 'contain' }}
-                                        sizes='(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw'
-                                        unoptimized
+                                        alt={`生成图片 ${index + 1}`}
+                                        className='h-full w-full object-contain'
                                     />
-                                </div>
+                                </button>
                             ))}
                         </div>
                     ) : imageBatch[viewMode] ? (
-                        <Image
+                        <img
                             src={imageBatch[viewMode].path}
                             alt={altText}
-                            width={512}
-                            height={512}
-                            className='max-h-full max-w-full object-contain'
-                            unoptimized
+                            className='max-h-full max-w-full object-contain p-3'
                         />
                     ) : (
-                        <div className='text-center text-white/40'>
-                            <p>编辑图像时出错。</p>
+                        <div className='text-center text-muted-foreground'>
+                            <p>图像显示时出错。</p>
                         </div>
                     )
                 ) : (
-                    <div className='text-center text-white/40'>
-                        <p>你生成的图像将在此显示。</p>
+                    <div className='flex max-w-sm flex-col items-center justify-center text-center text-muted-foreground'>
+                        <div className='mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-muted/30'>
+                            <ImageIcon className='h-6 w-6' />
+                        </div>
+                        <p className='font-medium text-foreground'>画布已准备好</p>
+                        <p className='mt-2 text-sm'>提交提示词后，生成结果会出现在这里，并自动同步到下方历史记录。</p>
                     </div>
                 )}
             </div>
 
-            <div className='flex h-10 w-full shrink-0 items-center justify-center gap-4'>
+            <div className='mt-4 flex h-10 w-full shrink-0 items-center justify-center gap-4'>
                 {showCarousel && (
-                    <div className='flex items-center gap-1.5 rounded-md border border-white/10 bg-neutral-800/50 p-1'>
+                    <div className='flex items-center gap-1.5 rounded-full border border-border bg-background/45 p-1'>
                         <Button
                             variant='ghost'
                             size='icon'
-                            className={cn(
-                                'h-8 w-8 rounded p-1',
-                                viewMode === 'grid'
-                                    ? 'bg-white/20 text-white'
-                                    : 'text-white/50 hover:bg-white/10 hover:text-white/80'
-                            )}
+                            className={cn('h-8 w-8 rounded-full p-1', viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}
                             onClick={() => onViewChange('grid')}
                             aria-label='显示网格视图'>
                             <Grid className='h-4 w-4' />
@@ -164,20 +161,15 @@ export function ImageOutput({
                                 variant='ghost'
                                 size='icon'
                                 className={cn(
-                                    'h-8 w-8 overflow-hidden rounded p-0.5',
-                                    viewMode === index
-                                        ? 'ring-2 ring-white ring-offset-1 ring-offset-black'
-                                        : 'opacity-60 hover:opacity-100'
+                                    'h-8 w-8 overflow-hidden rounded-full p-0.5',
+                                    viewMode === index ? 'ring-2 ring-ring ring-offset-1 ring-offset-background' : 'opacity-65 hover:opacity-100'
                                 )}
                                 onClick={() => onViewChange(index)}
                                 aria-label={`选择图像 ${index + 1}`}>
-                                <Image
+                                <img
                                     src={img.path}
-                                    alt={`Thumbnail ${index + 1}`}
-                                    width={28}
-                                    height={28}
-                                    className='h-full w-full object-cover'
-                                    unoptimized
+                                    alt={`缩略图 ${index + 1}`}
+                                    className='h-full w-full rounded-full object-cover'
                                 />
                             </Button>
                         ))}
@@ -189,11 +181,7 @@ export function ImageOutput({
                     size='sm'
                     onClick={handleSendClick}
                     disabled={!canSendToEdit}
-                    className={cn(
-                        'shrink-0 border-white/20 text-white/80 hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-50',
-                        // Hide button completely if grid view is active and there are multiple images
-                        showCarousel && viewMode === 'grid' ? 'invisible' : 'visible'
-                    )}>
+                    className={cn('shrink-0 rounded-full disabled:pointer-events-none disabled:opacity-50', showCarousel && viewMode === 'grid' ? 'invisible' : 'visible')}>
                     <Send className='mr-2 h-4 w-4' />
                     发送到编辑
                 </Button>
