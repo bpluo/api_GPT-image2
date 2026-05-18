@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { calculateApiCost, type CostDetails, type GptImageModel } from '@/lib/cost-utils';
 import { db, deleteStoredImages, putStoredImage, type ImageRecord } from '@/lib/db';
 import { getPresetDimensions } from '@/lib/size-utils';
+import type { PromptTemplate } from '@/lib/preset-prompts';
 import { useLiveQuery } from 'dexie-react-hooks';
 import * as React from 'react';
 
@@ -34,6 +35,9 @@ export type HistoryMetadata = {
     costDetails: CostDetails | null;
     output_format?: GenerationFormData['output_format'];
     model?: GptImageModel;
+    presetTitle?: string;
+    presetCategory?: string;
+    presetTags?: string[];
 };
 
 type DrawnPoint = {
@@ -137,6 +141,7 @@ export default function HomePage() {
     const blobUrlCacheRef = React.useRef<Map<string, string>>(new Map());
     const selectedHistoryItemRef = React.useRef<HistoryMetadata | null>(null);
     const pendingEditParentRef = React.useRef<HistoryMetadata | null>(null);
+    const selectedPresetRef = React.useRef<PromptTemplate | null>(null);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordDialogContext, setPasswordDialogContext] = React.useState<'initial' | 'retry'>('initial');
     const [lastApiCallArgs, setLastApiCallArgs] = React.useState<[GenerationFormData | EditingFormData] | null>(null);
@@ -444,6 +449,9 @@ export default function HomePage() {
                 mode,
                 costDetails: calculateApiCost(usage, currentModel),
                 model: currentModel,
+                presetTitle: selectedPresetRef.current?.title,
+                presetCategory: selectedPresetRef.current ? '科研论文绘图' : undefined,
+                presetTags: selectedPresetRef.current?.tags,
                 coverImageFilename: images[0]?.filename
             };
         },
@@ -833,6 +841,9 @@ export default function HomePage() {
                                 setEnableStreaming={setEnableStreaming}
                                 partialImages={partialImages}
                                 setPartialImages={setPartialImages}
+                                onPresetSelect={(preset) => {
+                                    selectedPresetRef.current = preset;
+                                }}
                             />
                         </div>
                         <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
@@ -884,6 +895,9 @@ export default function HomePage() {
                                 setEnableStreaming={setEnableStreaming}
                                 partialImages={partialImages}
                                 setPartialImages={setPartialImages}
+                                onPresetSelect={(preset) => {
+                                    selectedPresetRef.current = preset;
+                                }}
                             />
                         </div>
                     </div>
