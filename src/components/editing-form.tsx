@@ -429,7 +429,7 @@ export function EditingForm({
         }
 
         if (file.type !== 'image/png') {
-            alert('无效的文件类型。请滵上一个 PNG 文件作为遯罩。');
+            alert('无效的文件类型。请上传一个 PNG 文件作为遮罩。');
             event.target.value = '';
             return;
         }
@@ -441,7 +441,7 @@ export function EditingForm({
         img.onload = () => {
             if (img.width !== editOriginalImageSize.width || img.height !== editOriginalImageSize.height) {
                 alert(
-                    `遯罩笄度 (${img.width}x${img.height}) 必須與殐証圖像笄度 (${editOriginalImageSize.width}x${editOriginalImageSize.height}) 相欺配。`
+                    `遮罩尺寸 (${img.width}x${img.height}) 必须与原始图像尺寸 (${editOriginalImageSize.width}x${editOriginalImageSize.height}) 相匹配。`
                 );
                 URL.revokeObjectURL(objectUrl);
                 event.target.value = '';
@@ -478,11 +478,11 @@ export function EditingForm({
     const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (imageFiles.length === 0) {
-            alert('請選擇至少一张图像來编辑。');
+            alert('请选择至少一张图像来编辑。');
             return;
         }
         if (editDrawnPoints.length > 0 && !editGeneratedMaskFile && !editIsMaskSaved) {
-            alert('請先保存你箕上的遯罩，然後提交。');
+            alert('请先保存你绘制的遮罩，然后再提交。');
             return;
         }
         if (customSizeInvalid) {
@@ -504,29 +504,29 @@ export function EditingForm({
     };
 
     const displayFileNames = (files: File[]) => {
-        if (files.length === 0) return '未選擇任何文件。';
+        if (files.length === 0) return '未选择任何文件。';
         if (files.length === 1) return files[0].name;
-        return `已選擇 ${files.length} 个文件`;
+        return `已选择 ${files.length} 个文件`;
     };
 
     return (
-        <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
-            <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
+        <Card className='flex h-full w-full flex-col overflow-hidden rounded-3xl border border-border/70 bg-card/70 shadow-2xl shadow-black/20 backdrop-blur-xl'>
+            <CardHeader className='flex items-start justify-between border-b border-border/70 pb-4'>
                 <div>
                     <div className='flex items-center'>
-                        <CardTitle className='py-1 text-lg font-medium text-white'>编辑图片</CardTitle>
+                        <CardTitle className='py-1 text-lg font-semibold'>编辑图片</CardTitle>
                         {isPasswordRequiredByBackend && (
                             <Button
                                 variant='ghost'
                                 size='icon'
                                 onClick={onOpenPasswordDialog}
-                                className='ml-2 text-white/60 hover:text-white'
+                                className='ml-2 text-muted-foreground hover:text-foreground'
                                 aria-label='Configure Password'>
                                 {clientPasswordHash ? <Lock className='h-4 w-4' /> : <LockOpen className='h-4 w-4' />}
                             </Button>
                         )}
                     </div>
-                    <CardDescription className='mt-1 text-white/60'>使用文本描述修改有旨图像。</CardDescription>
+                    <CardDescription className='mt-1 text-muted-foreground'>使用文本描述修改已有图像。</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>

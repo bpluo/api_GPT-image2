@@ -20,3 +20,9 @@ export class ImageDB extends Dexie {
 }
 
 export const db = new ImageDB();
+
+export const getStoredImage = (filename: string) => db.images.get(filename);
+
+export const putStoredImage = (record: ImageRecord) => db.images.put(record);
+
+export const deleteStoredImages = (filenames: string[]) => db.images.where('filename').anyOf(filenames).delete();

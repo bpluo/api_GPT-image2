@@ -30,9 +30,7 @@ import {
     LockOpen,
     HelpCircle,
     SquareDashed,
-    ChevronDown,
-    Sparkles as SparklesIcon,
-    Lightbulb
+    ChevronDown
 } from 'lucide-react';
 import * as React from 'react';
 
@@ -200,23 +198,23 @@ export function GenerationForm({
     };
 
     return (
-        <Card className='flex h-full w-full flex-col overflow-hidden rounded-lg border border-white/10 bg-black'>
-            <CardHeader className='flex items-start justify-between border-b border-white/10 pb-4'>
+        <Card className='flex h-full w-full flex-col overflow-hidden rounded-3xl border border-border/70 bg-card/70 shadow-2xl shadow-black/20 backdrop-blur-xl'>
+            <CardHeader className='flex items-start justify-between border-b border-border/70 pb-4'>
                 <div>
                     <div className='flex items-center'>
-                        <CardTitle className='py-1 text-lg font-medium text-white'>生成图片</CardTitle>
+                        <CardTitle className='py-1 text-lg font-semibold'>生成图片</CardTitle>
                         {isPasswordRequiredByBackend && (
                             <Button
                                 variant='ghost'
                                 size='icon'
                                 onClick={onOpenPasswordDialog}
-                                className='ml-2 text-white/60 hover:text-white'
+                                className='ml-2 text-muted-foreground hover:text-foreground'
                                 aria-label='配置密码'>
                                 {clientPasswordHash ? <Lock className='h-4 w-4' /> : <LockOpen className='h-4 w-4' />}
                             </Button>
                         )}
                     </div>
-                    <CardDescription className='mt-1 text-white/60'>从文本描述中創建新图片。</CardDescription>
+                    <CardDescription className='mt-1 text-muted-foreground'>从文本描述中创建新图片。</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>
