@@ -1,5 +1,6 @@
 'use client';
 
+import { AcademicPromptPicker } from '@/components/academic-prompt-picker';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,14 +30,13 @@ import {
     Lock,
     LockOpen,
     HelpCircle,
-    SquareDashed,
-    ChevronDown
+    SquareDashed
 } from 'lucide-react';
 import * as React from 'react';
 
 import type { GptImageModel } from '@/lib/cost-utils';
 import type { SizePreset } from '@/lib/size-utils';
-import { presetPromptCategories } from '@/lib/preset-prompts';
+import { getAcademicPromptsForMode, type PromptTemplate } from '@/lib/preset-prompts';
 
 export type GenerationFormData = {
     prompt: string;
@@ -86,6 +86,7 @@ type GenerationFormProps = {
     setEnableStreaming: React.Dispatch<React.SetStateAction<boolean>>;
     partialImages: 1 | 2 | 3;
     setPartialImages: React.Dispatch<React.SetStateAction<1 | 2 | 3>>;
+    onPresetSelect?: (preset: PromptTemplate | null) => void;
 };
 
 const RadioItemWithIcon = ({
@@ -145,13 +146,38 @@ export function GenerationForm({
     enableStreaming,
     setEnableStreaming,
     partialImages,
-    setPartialImages
+    setPartialImages,
+    onPresetSelect
 }: GenerationFormProps) {
     const showCompression = outputFormat === 'jpeg' || outputFormat === 'webp';
     const isGptImage2 = model === 'gpt-image-2';
     const customSizeValidation =
         size === 'custom' ? validateGptImage2Size(customWidth, customHeight) : { valid: true as const };
     const customSizeInvalid = size === 'custom' && !customSizeValidation.valid;
+    const academicPrompts = React.useMemo(() => getAcademicPromptsForMode('generate'), []);
+
+    const applyPresetRecommendations = (preset: PromptTemplate) => {
+        if (preset.recommendedSize) {
+            setSize(preset.recommendedSize);
+        }
+        if (preset.recommendedQuality) {
+            setQuality(preset.recommendedQuality);
+        }
+        if (preset.recommendedOutputFormat) {
+            setOutputFormat(preset.recommendedOutputFormat);
+        }
+        onPresetSelect?.(preset);
+    };
+
+    const handleReplacePreset = (preset: PromptTemplate) => {
+        setPrompt(preset.text);
+        applyPresetRecommendations(preset);
+    };
+
+    const handleAppendPreset = (preset: PromptTemplate) => {
+        setPrompt((current) => (current.trim() ? `${current.trim()}\n\n${preset.text}` : preset.text));
+        applyPresetRecommendations(preset);
+    };
 
     // Disable streaming when n > 1 or model is not gpt-image-2 (OpenAI limitation)
     React.useEffect(() => {
@@ -214,7 +240,7 @@ export function GenerationForm({
                             </Button>
                         )}
                     </div>
-                    <CardDescription className='mt-1 text-muted-foreground'>从文本描述中创建新图片。</CardDescription>
+                    <CardDescription className='mt-1 text-muted-foreground'>输入论文方法、实验数据或系统流程，生成可用于论文的学术图。</CardDescription>
                 </div>
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>
@@ -330,43 +356,15 @@ export function GenerationForm({
                         <Label htmlFor='prompt' className='text-white'>
                             描述
                         </Label>
-                        {/* 预设提示词快捷选择 */}
-                        <div className='relative'>
-                            <select
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (val) {
-                                        setPrompt(val);
-                                        e.target.value = '';
-                                    }
-                                }}
-                                value=''
-                                disabled={isLoading}
-                                className='mb-2 w-full appearance-none rounded-md border border-white/20 bg-black px-3 py-1.5 text-xs text-white/60 transition-colors hover:border-white/40 focus:border-white/50 focus:outline-none focus:ring-1 focus:ring-white/50'>
-                                <option value='' className='bg-black text-white/60'>
-                                    💡 选择预设提示词...
-                                </option>
-                                {presetPromptCategories.map((cat) => (
-                                    <optgroup
-                                        key={cat.id}
-                                        label={`${cat.emoji} ${cat.label}`}
-                                        className='bg-black text-white/80'>
-                                        {cat.prompts.map((p, i) => (
-                                            <option
-                                                key={`${cat.id}-${i}`}
-                                                value={p.text}
-                                                className='bg-black text-white/80'>
-                                                {p.title} — {p.text.slice(0, 40)}…
-                                            </option>
-                                        ))}
-                                    </optgroup>
-                                ))}
-                            </select>
-                            <ChevronDown className='pointer-events-none absolute right-2 top-1.5 h-3.5 w-3.5 text-white/40' />
-                        </div>
+                        <AcademicPromptPicker
+                            prompts={academicPrompts}
+                            disabled={isLoading}
+                            onReplace={handleReplacePreset}
+                            onAppend={handleAppendPreset}
+                        />
                         <Textarea
                             id='prompt'
-                            placeholder='例如：一个宣传写实的猫宇航员浮动在太空中'
+                            placeholder='粘贴论文摘要、方法描述、实验数据含义或系统模块关系；也可以先选上方科研模板。'
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             required

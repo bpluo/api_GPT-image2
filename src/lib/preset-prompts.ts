@@ -1,267 +1,195 @@
-/**
- * 预设提示词库 —— 按分类组织的高质量提示词模板
- * 参考了 OpenAI 官方 gallery 及社区优秀实践整理而成
- */
+export type PromptTemplate = {
+    title: string;
+    text: string;
+    description?: string;
+    recommendedSize?: 'auto' | 'square' | 'landscape' | 'portrait' | 'custom';
+    recommendedQuality?: 'low' | 'medium' | 'high' | 'auto';
+    recommendedOutputFormat?: 'png' | 'jpeg' | 'webp';
+    tags?: string[];
+    useCases?: ('generate' | 'edit')[];
+};
 
 export type PromptCategory = {
     id: string;
     label: string;
-    emoji: string;
-    prompts: { title: string; text: string }[];
+    icon: string;
+    prompts: PromptTemplate[];
 };
+
+const academicStyleRules = `
+
+## 统一论文绘图规范
+- Use a clean academic figure style: white background, flat vector shapes, precise alignment, thin arrows, and low-saturation professional colors.
+- All visible labels must be short, readable English labels. Avoid long paragraphs inside the figure.
+- Prefer publication-ready layout: clear hierarchy, consistent spacing, balanced whitespace, and figure elements that remain readable in a paper column.
+- Do not invent quantitative values, axis scales, legends, equations, dataset names, or method names. If data is missing, leave clean placeholders or visualize structure only.
+- Avoid photorealistic rendering, messy sketches, decorative 3D shadows, saturated colors, and unreadable tiny text.`;
 
 export const presetPromptCategories: PromptCategory[] = [
     {
         id: 'academic',
         label: '科研论文绘图',
-        emoji: '📄',
+        icon: 'FileText',
         prompts: [
             {
-                title: '论文架构图（中文版）',
-                text: '你是一位世界顶尖的学术插画专家，专注于为计算机视觉与人工智能领域的顶级会议（如 CVPR, NeurIPS, ICLR）绘制高质量、直观且美观的论文架构图。\n\n请阅读我提供的【论文方法描述】，首先深刻理解其核心机制、模块组成和数据流向。然后，基于你的理解，设计并绘制一张专业的学术架构图。\n\n## 视觉约束\n1. 风格基调：\n   - 必须具备顶会论文风格：专业、干净、现代、极简主义\n   - 核心美学：采用扁平化矢量插画风格，线条简洁，参考 DeepMind 或 OpenAI 论文中的图表美学\n   - 拒绝卡通感、油画感或过度艺术化，保持严谨的学术图表美学\n   - 背景必须是纯白色，无任何纹理或阴影\n\n2. 色彩体系：\n   - 严格使用淡色系或柔和色调\n   - 严禁使用过于鲜艳饱和的颜色（如大红大绿）或过于暗淡沉重的颜色。利用颜色的深浅变化来区分不同的模块类型\n\n3. 内容与布局：\n   - 将理解到的方法论转化为清晰的模块和数据流箭头\n   - 适当使用现代、简洁的矢量图标嵌入到模块中，以增强直观性\n\n4. 文字规范：\n   - 图中所有文字必须使用英文\n   - 必须为方法论中提到的关键模块或方程式添加清晰易读的文本标签\n   - 严禁在图中出现长句子、描述性段落或复杂的公式\n\n5. 禁止事项：\n   - 不允许使用逼真照片感\n   - 不允许杂乱的草图线条\n   - 不允许难以辨认的文本\n   - 不允许廉价的 3D 阴影瑕疵'
+                title: '方法架构图 / Method Pipeline',
+                description: '适合论文主图、模型结构、数据流、模块机制和核心创新展示。',
+                recommendedSize: 'landscape',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['方法架构图', 'Pipeline', '顶会主图'],
+                useCases: ['generate'],
+                text: `请基于我提供的论文方法描述，绘制一张 publication-ready 的方法架构图。
+
+## 图形目标
+- 展示方法的整体 pipeline、输入/输出、关键模块、数据流方向和核心创新点。
+- 将复杂方法拆成 3-6 个清晰阶段，每个阶段使用圆角模块、简洁图标或张量示意表达。
+- 用箭头表示信息流、特征流或训练/推理流程，必要时用不同颜色区分主干路径、辅助分支和损失约束。
+
+## 内容要求
+- 图中保留短英文标签，例如 Input, Encoder, Fusion, Decoder, Loss, Output。
+- 如果我提供张量尺寸、模块名、损失函数或数据集名，只使用我提供的信息，不要自行编造。
+- 突出 novelty：用细边框、浅色高亮或 callout 标注最关键模块。
+${academicStyleRules}`
             },
             {
-                title: '论文架构图（English）',
-                text: 'You are an expert Scientific Illustrator for top-tier AI conferences (NeurIPS/CVPR/ICML).\nYour task is to generate a professional "Illustration" (main figure for the paper) based on a research paper abstract and methodology.\n\n**Visual Style Requirements:**\n1. **Style:** Flat vector illustration, clean lines, academic aesthetic. Similar to figures in DeepMind or OpenAI papers.\n2. **Layout:** Organized flow (Left-to-Right, Top-to-Bottom, Circular and other shapes). Group related components logically.\n3. **Color Palette:** Professional pastel tones. White background.\n4. **Text Rendering:** You MUST include legible text labels for key modules or equations mentioned in the methodology (e.g., "Encoder", "Loss", "Transformer").\n5. **Negative Constraints:** NO photorealistic photos, NO messy sketches, NO unreadable text, NO 3D shading artifacts.\n\n**Generation Instruction:**\nHighlight the core novelty. Ensure the connection logic makes sense.'
+                title: '实验结果图 / Publication Chart',
+                description: '适合 SOTA 对比、消融实验、折线/柱状/热力图和多指标结果可视化。',
+                recommendedSize: 'landscape',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['实验结果图', 'Chart', '禁止编造数据'],
+                useCases: ['generate'],
+                text: `请基于我提供的实验数据或实验目的，绘制一张严谨的论文结果图。
+
+## 图形目标
+- 根据数据关系选择最合适的学术图表：grouped bar chart, horizontal bar chart, line chart with confidence band, heatmap, scatter plot, radar chart, box/violin plot, or qualitative comparison grid。
+- 强调统计严谨性：如果我提供均值/方差/多次实验结果，请加入 error bars、confidence interval 或清晰图例。
+- 如果方法名称较长，优先使用横向条形图；如果展示训练过程，优先使用带置信区间的折线图；如果展示矩阵结果，优先使用热力图。
+
+## 数据约束
+- Strictly use only the numbers, labels, methods, datasets, and metrics I provide.
+- Do not invent values, rankings, p-values, axis ranges, legends, or baselines.
+- If exact data is not provided, create a clean chart layout template with placeholders instead of fake data.
+${academicStyleRules}`
             },
             {
-                title: '实验结果绘图',
-                text: '你是一位就职于顶级科学期刊（如 Nature, Science）或计算机顶级会议（如 CVPR, NeurIPS）的资深数据可视化专家。你拥有极高的学术审美，严谨且专业。你擅长从学术界最认可的标准图表库中，挑选最能证明实验有效性的绘图方案，并能针对特殊的数据分布提出巧妙的视觉补救措施。\n\n请分析我提供的实验数据或实验目的，从以下标准学术图表库中推荐 1 到 2 种最佳绘图方案：\n\n## 标准学术图表库\n1. 纵向分组柱状图：最标准的 SOTA 对比\n2. 横向条形图：方法名称较长或对比项多时推荐\n3. 帕累托前沿图：展示两个相互制约指标的权衡关系\n4. 雷达图：多维度综合能力评估\n5. 堆叠柱状图：展示整体指标的细分构成\n6. 带置信区域的折线图：展示训练过程的 Loss 或 Accuracy\n7. 局部放大折线图：模型收敛结果接近时嵌入放大子图\n8. 散点拟合图：展示离散数据的整体趋势\n9. ROC 曲线：二分类任务标准图表\n10. Precision-Recall 曲线：类别不平衡数据集\n11. 热力图：大规模矩阵形式数据可视化\n12. 散点图：展示两个连续变量间的相关性\n13. 气泡图：引入第三个维度（气泡大小表示参数量或计算成本）\n14. 小提琴图：优于箱线图，展示概率密度分布形状\n15. 箱线图：展示多组数据的分布范围和离群点\n16. 环形图/扇形图：分类数据占比展示\n17. 双Y轴图：同时展示两个量纲不同的变量\n18. 柱折组合图：背景柱状图+前景折线图\n19. 分面网格图：拆分为矩阵排列的一组小图\n\n## Constraints\n1. 来源优先：优先从上述列表中选择\n2. 统计严谨：若数据包含多次实验结果或方差信息，强烈建议添加误差线或置信区间\n3. 尺度适应性：数据组间差异巨大时建议断裂坐标轴/对数坐标/归一化\n4. 视觉逻辑：根据标签长度选择横向或纵向柱状图，根据数据维度选择单轴或双轴\n\n请严格按照以下结构输出：\n1. 推荐方案：图表名称\n2. 核心理由：结合数据逻辑解释为什么这张图最符合当前学术叙事需求\n3. 视觉设计规范：坐标轴说明、尺度处理、统计要素、配色与样式建议'
+                title: '技术示意图 / System Diagram',
+                description: '适合系统架构、流程图、时序图、状态机、网络拓扑和工程论文配图。',
+                recommendedSize: 'landscape',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['技术示意图', '系统架构', '流程图'],
+                useCases: ['generate'],
+                text: `请基于我提供的系统或技术流程描述，绘制一张论文级技术示意图。
+
+## 图形目标
+- 根据内容选择 system architecture、flowchart、sequence diagram、state machine、ER diagram 或 network topology 风格。
+- 将系统分层展示，例如 Client / Service / Model / Database / External API，或 Sensor / Data / Model / Application。
+- 使用清晰箭头表达调用关系、数据流、状态转移或时序消息。
+
+## 视觉要求
+- 使用工程论文常见的白底或极浅灰底，模块为几何块，边框细、对齐严格。
+- 用少量角色色区分层级或组件类型，不使用花哨装饰。
+- 图例、协议名、模块名只使用我提供的信息；缺失时用 generic placeholders。
+${academicStyleRules}`
             },
             {
-                title: 'AI顶会架构图 - 跨模态视频-文本检索',
-                text: '请为我生成一张用于AI顶会的高质量模型架构图。\n\n主题：基于跨模态注意力机制的视频-文本检索网络。\n\n具体要求：\n1. 视觉风格：采用科技感扁平风，背景纯白，模块之间用低饱和度的科技蓝、浅紫色区分。\n2. 结构细节：\n   - 顶部并列两个输入：左侧是一个视频片段（用三个堆叠的矩形表示帧序列），右侧是一段文本（用带文字的横条表示）。\n   - 视频帧经过3D卷积层（用立体的长方体表示，标注"3D Conv"），输出特征图。\n   - 文本经过BERT编码（用并排的小方块表示Token，上方加一个"BERT"标签）。\n   - 核心难点：在中间层，请用"彩色渐变带状箭头"表示视频特征与文本特征的跨模态交互，箭头汇聚到一个"跨模态注意力模块"（用一个半透明的圆角矩形框，内部写"Cross-Attention"）。\n   - 最后，特征融合后输出到两个并列的分类头（一个是视频-文本匹配分数，一个是文本生成）。\n3. 文字标注：所有模块名称、张量尺寸使用9pt的Inter字体，保持清晰。\n4. 禁忌：避免使用高光反射，模块之间间距适中，不要挤在一起。'
+                title: '图形摘要 / Graphical Abstract',
+                description: '适合期刊 graphical abstract、研究总览和论文首页视觉摘要。',
+                recommendedSize: 'landscape',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['Graphical Abstract', '研究总览'],
+                useCases: ['generate'],
+                text: `请基于我提供的研究主题和主要贡献，绘制一张期刊风格 graphical abstract。
+
+## 图形目标
+- 用 3-4 个连续面板讲清楚 Problem → Method → Key Mechanism → Outcome。
+- 画面应像论文图形摘要，而不是营销海报；重点是科学逻辑、机制路径和可读性。
+- 如果涉及实验装置、材料、算法或生物机制，用简洁示意而非写实照片。
+${academicStyleRules}`
             },
             {
-                title: 'IEEE系统示意图 - 数字孪生故障诊断',
-                text: '请生成一张用于IEEE Transactions级别的工程系统示意图。\n\n主题：基于数字孪生的风力发电机齿轮箱故障诊断系统。\n\n具体要求：\n1. 视觉风格：采用工业设计常用的灰白背景，组件用简洁的几何图形，边缘清晰，带有轻微的阴影层次感。\n2. 结构细节：\n   - 整体分为三层：物理层、数据层、应用层，用浅灰色半透明矩形框分隔。\n   - 物理层（底部）：画一个简化的风力发电机（用圆柱表示塔筒，三片叶片表示风轮），旁边放大显示齿轮箱（用齿轮图标表示）。齿轮箱上标注传感器节点（用小圆点，旁边标"振动传感器"、"温度传感器"）。\n   - 数据层（中部）：从传感器引出箭头指向"数据采集卡"（扁平长方体），再流向"云端服务器"（云朵图标内嵌数据库符号）。在服务器旁边添加"数字孪生体"图标（用虚拟轮廓的齿轮箱）。\n   - 应用层（顶部）：从云端引出三个箭头指向三个模块："状态监测"、"故障诊断"（带放大镜）、"寿命预测"（带时钟）。\n3. 连线要求：所有连线用细实线，数据流向用箭头明确。关键路径用红色或蓝色高亮。\n4. 文字标注：所有模块名称使用8pt的Arial字体，图例统一放在右下角。'
+                title: '定性对比网格 / Qualitative Comparison',
+                description: '适合 CV/ML 论文中的多方法、多样本、多列对比结果图。',
+                recommendedSize: 'landscape',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['定性对比', 'Comparison Grid'],
+                useCases: ['generate'],
+                text: `请基于我提供的样本、方法和对比目标，绘制一张论文定性对比网格。
+
+## 图形目标
+- 使用规则网格布局：rows = samples, columns = methods 或 ablations。
+- 每列有清晰英文方法名，每行保持相同样本顺序。
+- 用细边框、放大框或箭头突出关键差异，但不要夸张装饰。
+
+## 严格约束
+- 不要生成虚假的实验结果图像或假数据。
+- 如果我没有提供真实结果，只生成空白网格模板、标签、占位框和版式结构。
+${academicStyleRules}`
+            },
+            {
+                title: '科研图修订 / Figure Refinement',
+                description: '用于编辑模式：统一已有论文图风格、清理背景、修正布局和标签。',
+                recommendedSize: 'auto',
+                recommendedQuality: 'high',
+                recommendedOutputFormat: 'png',
+                tags: ['编辑修订', '统一风格'],
+                useCases: ['edit'],
+                text: `请在保留原图科学含义和结构的前提下，将这张图修订为更适合论文发表的版本。
+
+## 修订目标
+- 保留原有模块、连线、数据关系和标签含义，不改变科学结论。
+- 统一为干净的 academic vector style：白底、低饱和配色、细边框、整齐对齐、清晰箭头。
+- 改善文字可读性，将标签整理为短英文标签；不要新增我没有提供的术语或数值。
+- 清理多余背景、杂乱线条、过重阴影和不一致字体。
+${academicStyleRules}`
             }
         ]
     },
     {
         id: 'illustration',
         label: '插画',
-        emoji: '🎨',
+        icon: 'Palette',
         prompts: [
-            {
-                title: '水彩风景',
-                text: '柔和的水彩风格风景画，描绘了一座日本古城在樱花季节中的景象，远处是覆盖着雪的富士山，温暖的晨光洒在整个画面上，柔和的色彩融合，梦幻般的氛围'
-            },
-            {
-                title: '儿童绘本',
-                text: '温馨可爱的儿童绘本插画风格，一只穿着黄色雨衣的小兔子在雨后森林中跳跃，水坑反射着彩虹色，柔和的粉彩配色，简单的形状，迷人的表情'
-            },
-            {
-                title: '水墨极简',
-                text: '极简主义中国水墨画风格，一叶扁舟在薄雾笼罩的江面上行驶，只用了寥寥数笔黑色墨迹，大量留白，宁静致远，优雅的笔触'
-            },
-            {
-                title: '扁平矢量人物',
-                text: '现代扁平矢量插画风格，一位年轻女性在数字办公桌前工作，周围环绕着植物和暖色灯光，干净的几何形状，和谐的配色方案，柔和的阴影，适合网页使用'
-            },
-            {
-                title: '奇幻森林',
-                text: '高度详细的数字绘画，奇幻森林场景，发光的蘑菇和巨大古树的根部构成蜿蜒小径，蓝色和紫色的魔法光粒子在空中飘浮，神秘的氛围，史诗般的构图'
-            }
+            { title: '水彩风景', text: '柔和的水彩风格风景画，描绘了一座日本古城在樱花季节中的景象，远处是覆盖着雪的富士山，温暖的晨光洒在整个画面上，柔和的色彩融合，梦幻般的氛围' },
+            { title: '儿童绘本', text: '温馨可爱的儿童绘本插画风格，一只穿着黄色雨衣的小兔子在雨后森林中跳跃，水坑反射着彩虹色，柔和的粉彩配色，简单的形状，迷人的表情' },
+            { title: '水墨极简', text: '极简主义中国水墨画风格，一叶扁舟在薄雾笼罩的江面上行驶，只用了寥寥数笔黑色墨迹，大量留白，宁静致远，优雅的笔触' }
         ]
     },
     {
         id: 'poster',
         label: '海报设计',
-        emoji: '📰',
+        icon: 'Newspaper',
         prompts: [
-            {
-                title: '电影海报',
-                text: '史诗科幻电影海报，一名孤独的宇航员站在荒芜的外星景观中，凝视着巨大行星在天空中升起，戏剧性的光线，丰富的纹理，大胆的排版空间，电影般的构图'
-            },
-            {
-                title: '极简音乐节',
-                text: '为夏季音乐节设计的极简主义海报，黑底配霓虹粉色和青色渐变，抽象的声波图形，大胆的无衬线字体，现代且充满活力的风格，A4比例'
-            },
-            {
-                title: '复古旅行',
-                text: '复古旅行海报风格，描绘地中海海岸小镇，白色建筑和蓝色圆顶教堂，九重葛花装饰，暖橙色和蓝色的复古色调，粗体文字区域，经典构图'
-            },
-            {
-                title: '环保公益',
-                text: '具冲击力的环保公益海报，一个巨大的塑料袋淹没在深蓝色海水中，被误认为是水母，光线从上方穿过水面，醒目的标题空间，唤起情感共鸣'
-            }
+            { title: '电影海报', text: '史诗科幻电影海报，一名孤独的宇航员站在荒芜的外星景观中，凝视着巨大行星在天空中升起，戏剧性的光线，丰富的纹理，大胆的排版空间，电影般的构图' },
+            { title: '极简音乐节', text: '为夏季音乐节设计的极简主义海报，黑底配霓虹粉色和青色渐变，抽象的声波图形，大胆的无衬线字体，现代且充满活力的风格，A4比例' }
         ]
     },
     {
         id: 'ui-ux',
         label: 'UI/UX设计',
-        emoji: '🖥️',
+        icon: 'Monitor',
         prompts: [
-            {
-                title: '移动端仪表盘',
-                text: '现代移动端应用界面设计，深色模式的金融仪表盘，包含彩色图表和卡片式布局，跟踪支出、投资和预算，干净的无衬线字体，微妙的光泽效果，iOS风格导航'
-            },
-            {
-                title: 'SaaS着陆页',
-                text: '现代SaaS产品着陆页的界面设计，浅色背景，干净的布局，大标题和插图，可爱的品牌配色方案（靛蓝和珊瑚色），客户推荐区域，圆角组件，极简主义'
-            },
-            {
-                title: '设置页面',
-                text: '桌面应用程序设置页面的UI设计，深色侧边栏和浅色内容区域，分组设置项带有切换开关和滑块，干净的分隔线，优雅的排版层次，现代极简风格'
-            },
-            {
-                title: '数据可视化',
-                text: '深色主题的数据仪表板，多个交互式图表 - 折线图、条形图和热力图，显示网站分析数据，未来感设计，霓虹蓝和紫色高亮，信息密度高但清晰'
-            }
+            { title: '移动端仪表盘', text: '现代移动端应用界面设计，深色模式的金融仪表盘，包含彩色图表和卡片式布局，跟踪支出、投资和预算，干净的无衬线字体，微妙的光泽效果，iOS风格导航' },
+            { title: 'SaaS着陆页', text: '现代SaaS产品着陆页的界面设计，浅色背景，干净的布局，大标题和插图，可爱的品牌配色方案，客户推荐区域，圆角组件，极简主义' }
         ]
-    },
-    {
-        id: 'photography',
-        label: '摄影模拟',
-        emoji: '📷',
-        prompts: [
-            {
-                title: '街拍人像',
-                text: '在黄金时段拍摄的街头摄影，一位老年街头音乐家在布鲁克林街头演奏萨克斯风，温暖的侧光，深沉的阴影，35mm胶片颗粒感，捕捉真实情感，纪实风格'
-            },
-            {
-                title: '产品摄影',
-                text: '极简产品摄影，一款精致的香水瓶放置在纹理大理石表面上，柔和的工作室灯光从侧面照射，干净的白色背景，高端质感，锐利对焦，商业广告风格'
-            },
-            {
-                title: '延时夜景',
-                text: '长曝光夜景摄影，城市天际线在蓝色小时呈现，车流形成光轨，平静的水面倒映摩天大楼的灯光，高对比度，深邃的天空，壮观全景视角'
-            },
-            {
-                title: '美食摄影',
-                text: '俯拍美食摄影，木桌上摆放着一碗色彩丰富的巴西莓碗，配有格兰诺拉麦片、香蕉片和奇亚籽，自然日光从窗户射入，充满活力的色彩，诱人的纹理，Instagram风格'
-            },
-            {
-                title: '航拍风景',
-                text: '无人机俯拍海岸线，碧绿的海水撞击着崎岖的岩石海岸，白色的波浪泡沫形成复杂的图案，沙滩与蓝色海水形成对比，高角度，鲜艳的色彩，抽象的自然构图'
-            }
-        ]
-    },
-    {
-        id: 'logo-brand',
-        label: '标志与品牌',
-        emoji: '💼',
-        prompts: [
-            {
-                title: '科技公司标志',
-                text: '为一家AI科技初创公司设计的极简标志，结合了字母"V"和抽象的大脑或神经网络节点图案，干净的矢量线条，渐变的深蓝色到紫色配色方案，白色背景上，现代专业风格'
-            },
-            {
-                title: '有机食品标志',
-                text: '为一个有机食品品牌设计的标志，树叶与抽象的人形融合，柔和的绿色和大地色系，圆形徽章样式，手绘风格的线条，自然有机的感觉，白色背景，矢量风格'
-            },
-            {
-                title: '奢华品牌标志',
-                text: '奢华时尚品牌的标志设计，优雅的衬线字母组合，金色和黑色的配色方案，精致的装饰细节，压花效果，干净的白色背景，高端精致的外观'
-            }
-        ]
-    },
-    {
-        id: 'infographic',
-        label: '信息图表',
-        emoji: '📊',
-        prompts: [
-            {
-                title: '流程图表',
-                text: '信息图表展示一个AI模型的训练流程，从数据收集到模型部署的5个步骤，每个步骤用不同颜色的卡片连接，图标和简短说明，现代扁平设计风格，白色背景'
-            },
-            {
-                title: '对比图表',
-                text: '信息图表对比传统开发与AI辅助开发，左右分栏布局，图标和关键数据点，现代企业风格，蓝橙配色方案，干净整洁的排版，适合演示使用'
-            },
-            {
-                title: '时间线信息图',
-                text: '垂直时间线信息图，展示Web技术从1990年到2025年的演变，每个重要节点有图标和简短描述，不同的颜色段，复古未来主义风格，适合打印'
-            }
-        ]
-    },
-    {
-        id: 'manga-comic',
-        label: '漫画/动漫',
-        emoji: '💥',
-        prompts: [
-            {
-                title: '少年漫画战斗',
-                text: '动漫风格，少年漫画战斗场景，主角释放强大的能量波，蓝色和金色的光芒爆发，动态的线条和速度线，飞散的碎片，极具张力的姿势，激烈的面部表情，漫画风格'
-            },
-            {
-                title: '治愈系日常',
-                text: '治愈系动漫风格，阳光明媚的下午，一位女孩在传统日式房间中喝着茶，窗外是盛开的紫藤花，柔和的粉彩调色板，温暖的光线，舒适放松的氛围，细腻的画风'
-            },
-            {
-                title: '赛博朋克角色',
-                text: '赛博朋克动漫风格，一名义体改造战士站在霓虹闪烁的雨夜城市小巷中，发光的义肢和全息界面，反射在湿漉漉的柏油路上，高对比度，细致入微的机械细节'
-            }
-        ]
-    },
-    {
-        id: 'ecommerce',
-        label: '电商营销',
-        emoji: '🛍️',
-        prompts: [
-            {
-                title: '服装展示',
-                text: '电商服装展示图，一件时尚的秋冬羊毛大衣在米色背景上展示，干净的照明，正面和轻微角度视图，显示织物质感和剪裁细节，专业的商业摄影风格，极简构图'
-            },
-            {
-                title: '社交媒体促销',
-                text: '社交媒体促销图片，展示一个护肤产品系列，柔和的粉色调背景，产品排列整齐，周围点缀着植物和花朵，温暖的漫射光线，吸引人的生活方式风格，适合Instagram'
-            },
-            {
-                title: '节日促销横幅',
-                text: '节日促销横幅设计，圣诞主题，深绿色和金色配色方案，礼物盒和闪光装饰，粗体促销文字区域，喜庆优雅，适合电商网站首页横幅，横向宽幅'
-            }
-        ]
-    },
-    {
-        id: 'architecture',
-        label: '建筑与空间',
-        emoji: '🏛️',
-        prompts: [
-            {
-                title: '现代室内设计',
-                text: '现代简约客厅室内设计，大的落地窗引入自然光，白色和米色配色方案，绿色植物点缀，舒适的沙发和极简咖啡桌，墙上有抽象艺术画，干净整洁的空间'
-            },
-            {
-                title: '未来建筑',
-                text: '未来主义建筑，曲线形的白色结构，大面积的玻璃幕墙与周围的自然景观融为一体，黄昏时分，建筑内透出暖光，超现实风格，干净的几何形状，壮观的视觉效果'
-            },
-            {
-                title: '日式庭院',
-                text: '传统日本庭院景观，精心耙制的砾石图案，石灯笼，修剪整齐的盆景树，平静的倒映池，绿苔覆盖的石头，柔和的阳光，宁静致远，和谐的比例'
-            }
-        ]
-    },
-    {
-        id: 'abstract',
-        label: '抽象艺术',
-        emoji: '🌀',
-        prompts: [
-            {
-                title: '液态金属',
-                text: '流动的液态金属抽象艺术，金色和银色的液体在黑色背景上形成有机形状，光滑反光的表面，复杂的涟漪和漩涡图案，C4D渲染风格，超现实'
-            },
-            {
-                title: '几何渐变',
-                text: '抽象几何艺术，重叠的半透明圆形和矩形在明亮的渐变背景上，从紫色过渡到粉色再到青色，波普艺术影响，干净的矢量线条，充满活力和动感'
-            },
-            {
-                title: '神经网络结构',
-                text: '受神经科学启发的抽象艺术，发光的神经网络节点和连接在深蓝色空间中，3D深度，粒子效果，类似大脑的复杂连接模式，科技感，色彩斑斓'
-            }
-        ]
-    },
+    }
 ];
 
-/**
- * 返回所有预设提示词打平后的列表，用于随机抽取等功能
- */
+export const academicPromptCategory = presetPromptCategories.find((category) => category.id === 'academic')!;
+
+export function getAcademicPromptsForMode(mode: 'generate' | 'edit'): PromptTemplate[] {
+    return academicPromptCategory.prompts.filter((prompt) => !prompt.useCases || prompt.useCases.includes(mode));
+}
+
 export function getAllPresetPrompts(): { title: string; text: string; categoryLabel: string }[] {
     const result: { title: string; text: string; categoryLabel: string }[] = [];
     for (const cat of presetPromptCategories) {
         for (const p of cat.prompts) {
-            result.push({ ...p, categoryLabel: cat.label });
+            result.push({ title: p.title, text: p.text, categoryLabel: cat.label });
         }
     }
     return result;

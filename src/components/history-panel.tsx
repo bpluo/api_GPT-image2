@@ -308,6 +308,11 @@ function HistoryPanelImpl({
                                                             </div>
                                                         )}
                                                         <div className='absolute inset-x-2 bottom-2 space-y-1 text-left'>
+                                                            {item.presetTitle && (
+                                                                <div className='inline-flex max-w-full rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-medium text-primary-foreground backdrop-blur'>
+                                                                    <span className='truncate'>{item.presetTitle}</span>
+                                                                </div>
+                                                            )}
                                                             <p className='truncate text-[11px] font-medium text-white'>{item.prompt || '未记录提示词'}</p>
                                                             <div className='flex items-center justify-between text-[10px] text-white/70'>
                                                                 <span>{formatHistoryTime(item.timestamp)}</span>
