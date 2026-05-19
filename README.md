@@ -1,101 +1,165 @@
 ## <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
 
-一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
+面向学术科研论文绘图的 OpenAI 图像 API 工作台。项目围绕“论文图生成 → 局部修订 → 历史回看 → 继续编辑”流程优化，适合制作方法架构图、实验结果图、技术示意图、图形摘要和论文配图草稿。
 
 <p align="center">
   <img src="./readme-images/interface.jpg" alt="界面截图" width="820"/>
 </p>
 
-**本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）
+**当前定位：** 论文绘图助手 + 图像生成/编辑调试台。核心 API、存储与历史链路保持简单透明，方便本地研究、Serverless 部署和后续二次开发。
 
-**关键特性一览**
+## 核心功能
 
-- 支持生成与编辑模式（`generate` / `edit`）。
-- 流式生成与部分图像预览（Server-side SSE，客户端可显示逐步生成的预览帧）。
-- 可配置模型：`gpt-image-2`（默认）、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`。
-- 多种输出格式与压缩设置：`png` / `jpeg` / `webp`，支持输出压缩（当适用）。
-- 学术绘图预设（`AcademicPromptPicker`）：内置多种论文级别的绘图模板与提示词。
-- 内置 Mask 编辑器（绘制/上传）用于局部编辑。
-- 本地历史与成本估算：每次请求记录参数、使用量与估算 USD 成本。
-- 两种图像存储模式：服务器文件系统（默认）或浏览器 IndexedDB（Dexie.js，适合 Serverless 部署）。
+- **生成与编辑双模式**：支持 `generate` / `edit`，可从生成结果直接发送到编辑表单继续修订。
+- **科研论文绘图模板**：内置 `AcademicPromptPicker`，覆盖方法架构图、实验结果图、技术示意图、图形摘要、定性对比网格和科研图修订。
+- **覆盖 / 追加两种模板操作**：可用模板覆盖当前提示词，也可在论文摘要、方法描述或实验数据说明后追加绘图规范。
+- **学术风格约束**：默认强调白底、低饱和配色、扁平矢量、英文短标签、可打印布局，并避免虚构数据、轴、图例、方法名或数据集名。
+- **流式生成预览**：生成模式下，`gpt-image-2` 且 `n=1` 时可启用 SSE 流式部分预览。
+- **Mask 编辑器**：编辑模式支持上传/粘贴图片、绘制 Mask、上传 Mask，适合局部重绘、统一风格、清理背景和修正标签。
+- **历史记录链路**：记录 prompt、参数、模型、成本估算、存储模式、父子编辑关系和科研模板标签。
+- **稳定图片显示**：本地 API 图片、IndexedDB Blob、Data URL 预览统一按场景解析，结果图、历史缩略图和编辑来源图保持可回显。
+- **两种存储模式**：服务器文件系统 `fs`（默认）或浏览器 IndexedDB（Dexie.js，适合 Serverless）。
 
-技术栈与主要依赖：Next.js 16、React 19、TypeScript、TailwindCSS、shadcn/ui（Radix + lucide）、Dexie.js、openai 官方 SDK。
+## 推荐使用流程
 
-主要 API 路由（服务器端实现）：
+### 1. 生成论文图
 
-- `POST /api/images` —— 接受表单提交（生成或编辑），支持流式（SSE）与非流式响应。
-- `GET /api/image/[filename]` —— 从服务器文件系统读取单张图片（仅当使用 filesystem 存储时）。
-- `POST /api/image-delete` —— 删除指定文件（支持可选的密码验证）。
-- `GET /api/auth-status` —— 查询是否需要密码（由环境变量 `APP_PASSWORD` 决定）。
+1. 进入“生成图片”。
+2. 选择科研模板：
+   - **方法架构图 / Method Pipeline**：模型结构、pipeline、数据流、核心创新。
+   - **实验结果图 / Publication Chart**：柱状图、折线图、热力图、误差线和置信区间；只使用用户提供数据。
+   - **技术示意图 / System Diagram**：系统架构、流程图、时序图、状态机、网络拓扑。
+3. 点击“覆盖提示词”从模板开始，或点击“追加规范”把论文绘图规范附加到已有描述后。
+4. 输入论文方法、实验数据含义、系统模块与数据流。
+5. 选择尺寸、质量、输出格式，提交生成。
 
-存储模式说明：
+### 2. 修订已有图
 
-- 默认（`fs`）：生成的图片写入项目根目录下的 `generated-images/`，并通过 `GET /api/image/[filename]` 提供访问。
-- IndexedDB（`indexeddb`）：适用于 Vercel 或其他 Serverless 环境。服务端返回 Base64 字符串（`b64_json`），客户端将解码并用 Dexie 存储为 Blob。
+1. 切换到“编辑图片”，或从输出/历史记录点击发送到编辑。
+2. 上传、粘贴或使用历史图片作为源图。
+3. 可选绘制 Mask，限定局部重绘区域。
+4. 选择“科研图修订 / Figure Refinement”等编辑模板。
+5. 提交后会生成新的历史记录，并保留与来源记录的父子关系。
 
-安全与可选配置（环境变量）：
+### 3. 回看历史与继续编辑
 
-- `OPENAI_API_KEY`（必需）: OpenAI API Key。
-- `OPENAI_API_BASE_URL`（可选）: 使用自定义兼容 Endpoint（例如私有推理服务）。
-- `NEXT_PUBLIC_IMAGE_STORAGE_MODE`（可选）: `fs` 或 `indexeddb`，不设置时会在 Vercel 环境默认切换为 `indexeddb`。
-- `APP_PASSWORD`（可选）: 若设置，删除等敏感 API 需要发送密码的 SHA-256 校验值（客户端会本地哈希后提交）。
+- 历史面板展示每次请求的缩略图、模型、耗时、成本估算和科研模板标签。
+- 新记录使用稳定 `id` 管理，删除历史不会再依赖 timestamp 匹配。
+- 删除记录会同步清理对应图片；IndexedDB 模式会清理本地 Blob 和缓存 URL。
+- 点击历史记录可回显图片；点击“发送到编辑”可沿用历史图片继续修订。
 
-快速开始（本地开发）
+## 技术栈
+
+- Next.js 16 / React 19 / TypeScript
+- Tailwind CSS / shadcn/ui / Radix UI / lucide-react
+- OpenAI 官方 SDK
+- Dexie.js（IndexedDB 存储）
+- Server-Sent Events（流式生成预览）
+
+## API 路由
+
+- `POST /api/images`：图像生成与编辑。支持普通 JSON 响应和生成模式 SSE 流式响应。
+- `GET /api/image/[filename]`：读取服务器文件系统中的图片。
+- `POST /api/image-delete`：删除指定图片文件，支持可选密码验证。
+- `GET /api/auth-status`：查询后端是否启用 `APP_PASSWORD`。
+
+## 存储模式
+
+### `fs`：服务器文件系统
+
+默认模式。生成图片写入项目根目录的 `generated-images/`，并通过 `/api/image/[filename]` 读取。
+
+适合：
+
+- 本地开发
+- 长驻服务器
+- 需要直接查看生成文件的场景
+
+### `indexeddb`：浏览器 IndexedDB
+
+服务端返回 `b64_json`，客户端解码为 Blob 并写入 Dexie。历史记录仍保存在 `localStorage.openaiImageHistory`。
+
+适合：
+
+- Vercel 等 Serverless 平台
+- 文件系统不可持久化的部署环境
+- 希望图片保存在浏览器本地的场景
+
+## 环境变量
+
+创建 `.env.local`：
+
+```dotenv
+OPENAI_API_KEY=在此填入你的_openai_api_key
+
+# 可选：兼容 OpenAI Images API 的自定义 Endpoint
+# OPENAI_API_BASE_URL=
+
+# 可选：fs 或 indexeddb；Vercel 环境建议 indexeddb
+# NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
+
+# 可选：启用后敏感 API 需要客户端提交 SHA-256 密码哈希
+# APP_PASSWORD=你的管理密码
+```
+
+## 本地开发
 
 先决条件：Node.js >= 20。
-
-克隆仓库并安装依赖：
 
 ```bash
 git clone <repo-url>
 cd gpt-image-playground
 npm install
-```
-
-创建 `.env.local` 并添加至少 `OPENAI_API_KEY`：
-
-```dotenv
-OPENAI_API_KEY=在此填入你的_openai_api_key
-# 可选：
-# OPENAI_API_BASE_URL=
-# NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
-# APP_PASSWORD=你的管理密码（仅在需要时设置）
-```
-
-启动开发服务器：
-
-```bash
 npm run dev
 ```
 
-打开浏览器访问： http://localhost:3000
+打开： http://localhost:3000
 
-运行/部署注意事项
+## 常用脚本
 
-- Node 版本需 >= 20（package.json 中 engines 有说明）。
-- 若在 Serverless 平台（比如 Vercel）部署，建议将 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 设为 `indexeddb`，以避免平台文件系统限制。
+```bash
+npm run dev      # 启动开发服务器
+npm run build    # 生产构建
+npm run start    # 启动生产服务
+npm run lint     # ESLint 检查
+npm run format   # Prettier 格式化 src
+```
 
-使用说明要点
+## 部署注意
 
-- 在生成模式中可选择流式（Stream）以获得逐步可视化预览；当使用 `gpt-image-2` 且启用 `stream`，服务器会以 SSE 方式推送部分预览帧与最终结果。
-- 编辑模式允许上传或粘贴图片、绘制 Mask 并提交编辑请求。
-- 历史面板会记录每次操作的参数、模型与估算成本，支持将历史图片重新发送到编辑表单或删除（需确认或密码）。
+- Serverless 平台建议设置 `NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb`。
+- `fs` 模式需要服务器进程拥有 `generated-images/` 读写权限。
+- 如果设置 `APP_PASSWORD`，前端会本地计算 SHA-256 后提交，不会直接发送明文密码。
+- Next.js 如提示 workspace root 推断到上级目录，检查是否存在多份 lockfile，或在 `next.config` 中显式配置 Turbopack root。
 
-开发者与贡献
+## 图片显示与历史记录说明
 
-- 代码组织：应用位于 [src/app](src/app)；可复用组件在 [src/components](src/components)；辅助库在 [src/lib](src/lib)。
-- 如果想运行单元或集成测试，请先查看项目是否包含测试脚本并运行 `npm run test`（本仓库当前未包含测试脚本）。
+- 生成结果、历史缩略图、编辑源图都通过统一解析函数获得可显示地址。
+- `fs` 模式使用 `/api/image/[filename]`。
+- `indexeddb` 模式使用 `URL.createObjectURL(blob)`，并缓存/释放 Blob URL。
+- 历史记录包含 `id`、`sessionId`、`parentId`、`sourceImageFilenames`、`coverImageFilename`，用于串联生成-编辑链路。
+- 科研模板元数据只在当前 prompt 仍包含模板文本时写入，避免手动改写后历史标签误报。
 
-常见问题（FAQ）
+## FAQ
 
-- Q: 我能使用哪个模型？
-  A: UI 支持从 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini` 中选择。不同模型在成本、输出质量和 Mask 行为上存在差异。
-- Q: 为什么图片有时无法加载？
-  A: 如果使用 `fs` 模式，确保 `generated-images/` 目录存在且服务器进程有读写权限；如果使用 `indexeddb`，请检查浏览器的存储权限与 Dexie 是否成功写入。
+**Q: 为什么编辑模式没有流式预览？**  
+A: 当前流式参数只对生成模式的 `gpt-image-2` 生效。编辑模式隐藏流式 UI，避免产生“已开启但无效果”的误导。
 
-联系我们
-如需帮助或报告问题，请在仓库打开 Issue，或联系作者 bpluo（仓库 owner）。
+**Q: 实验结果图会不会编造数据？**  
+A: 模板明确要求只使用用户提供的 numbers、labels、methods、datasets 和 metrics。缺数据时应生成占位图表结构，而不是伪造数值。
 
----
+**Q: 图片看不见怎么办？**  
+A: `fs` 模式检查 `generated-images/` 是否存在且可读写；`indexeddb` 模式检查浏览器存储权限。历史记录中图片若已被手动删除，则缩略图无法回显。
 
-（此 README 基于仓库代码与当前分支扫描自动生成，要进一步调整或添加示例截图/示范流程，我可以继续更新。）
+**Q: 支持哪些模型？**  
+A: UI 支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`。不同模型在尺寸、质量、成本和编辑行为上可能不同。
+
+## 开发目录
+
+- [src/app](src/app)：App Router 页面和 API 路由。
+- [src/components](src/components)：表单、历史面板、输出面板、科研模板选择器和 UI 组件。
+- [src/lib](src/lib)：成本估算、尺寸校验、IndexedDB、科研提示词库和通用工具。
+
+## 许可证与反馈
+
+如需帮助或报告问题，请在仓库提交 Issue。
