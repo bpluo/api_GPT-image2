@@ -1,155 +1,101 @@
-# <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
+## <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
 
-一个基于 Web 的工坊，用于与 OpenAI 的 GPT 图像模型（`gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 和 `gpt-image-1-mini`）进行交互，实现图像生成与编辑功能。
-
-> **Note：** 本工坊默认使用 `gpt-image-2`，这是 OpenAI 最新的 GPT 图像模型。除了传统的固定尺寸外，它还支持高达 4K 的任意分辨率（附带有约束验证）。
+一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
 
 <p align="center">
-  <img src="./readme-images/interface.jpg" alt="界面截图" width="600"/>
+  <img src="./readme-images/interface.jpg" alt="界面截图" width="720"/>
 </p>
 
-## ✨ 功能特性
+**本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）
 
-- **🎨 图像生成模式：** 根据文本 Prompt 创建新图像。
-- **🖌️ 图像编辑模式：** 基于文本 Prompt 和可选的 Mask 修改现有图像。
-- **📄 预设提示词库：** 内置 11 个分类、50+ 条高质量预设提示词，涵盖插画、海报设计、UI/UX、科研论文绘图、摄影模拟、品牌标志、信息图表、漫画动漫、电商营销、建筑空间、抽象艺术等领域。科研论文绘图分类包含专业的论文架构图（中/英文版）和实验结果绘图 prompt。
-- **⚙️ 完整的 API 参数控制：** 通过界面直接访问和调整 OpenAI Images API 支持的所有相关参数（Size、Quality、输出格式、压缩、背景、审核、生成数量）。
-- **📐 自定义分辨率（gpt-image-2）：** 从 2K/4K 预设中选择，或输入任意的 Width × Height，系统会根据模型的约束条件进行实时验证（边长需为 16 的倍数，单边最大 3840 像素，宽高比 ≤ 3:1，总像素在 655,360 至 8,294,400 之间）。
-- **🎭 内置 Mask 工具：** 在编辑模式下轻松创建或上传 Mask，以指定需要修改的区域。您可以直接在图像上绘制来生成 Mask。
+**关键特性一览**
 
-    > ⚠️ 请注意，目前 `gpt-image-1` 的 Mask 功能并不能保证 100% 的控制效果。
-    >
-    > 1. [这是已知且被确认的模型限制。](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/37)
-    > 2. [OpenAI 计划在未来的更新中解决此问题。](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/41)
+- 支持生成与编辑模式（`generate` / `edit`）。
+- 流式生成与部分图像预览（Server-side SSE，客户端可显示逐步生成的预览帧）。
+- 可配置模型：`gpt-image-2`（默认）、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`。
+- 多种输出格式与压缩设置：`png` / `jpeg` / `webp`，支持输出压缩（当适用）。
+- 学术绘图预设（`AcademicPromptPicker`）：内置多种论文级别的绘图模板与提示词。
+- 内置 Mask 编辑器（绘制/上传）用于局部编辑。
+- 本地历史与成本估算：每次请求记录参数、使用量与估算 USD 成本。
+- 两种图像存储模式：服务器文件系统（默认）或浏览器 IndexedDB（Dexie.js，适合 Serverless 部署）。
 
-<p align="center">
-  <img src="./readme-images/mask-creation.jpg" alt="Mask 创建截图" width="350"/>
-</p>
+技术栈与主要依赖：Next.js 16、React 19、TypeScript、TailwindCSS、shadcn/ui（Radix + lucide）、Dexie.js、openai 官方 SDK。
 
-- **📜 增强的历史记录与成本追踪：**
-    - 所有历史记录以**横向滚动排列**展示，按**操作链分组**（同一张图的创建 + 后续编辑操作自动归为一组）。
-    - 鼠标悬浮缩略图时**图片放大 1.3x**，突破卡片边界显示，并浮现提示词预览和操作按钮。
-    - 查看每次请求所使用的参数。
-    - 获取详细的 API Token 用量和每次操作的预估成本明细（`USD`）。（提示：点击图像上的 `$` 金额即可查看）
-    - 查看每个历史项所使用的完整 Prompt。
-    - 查看历史总 API 成本。
-    - 从历史记录中删除项目（支持"不再询问"偏好）。
+主要 API 路由（服务器端实现）：
 
-<p align="center">
-  <img src="./readme-images/history.jpg" alt="历史记录截图" width="1306"/>
-</p>
+- `POST /api/images` —— 接受表单提交（生成或编辑），支持流式（SSE）与非流式响应。
+- `GET /api/image/[filename]` —— 从服务器文件系统读取单张图片（仅当使用 filesystem 存储时）。
+- `POST /api/image-delete` —— 删除指定文件（支持可选的密码验证）。
+- `GET /api/auth-status` —— 查询是否需要密码（由环境变量 `APP_PASSWORD` 决定）。
 
-<p align="center">
-  <img src="./readme-images/cost-breakdown.jpg" alt="成本明细截图" width="350"/>
-</p>
+存储模式说明：
 
-- **🖼️ 灵活的图像输出视图：** 以网格形式查看生成的图像批次，或选择单张图像进行近距离查看。
-- **🚀 发送到编辑：** 快速将任何生成的图像或历史图像直接发送到编辑表单。
-- **📋 粘贴到编辑：** 直接从剪贴板粘贴图像到编辑模式的源图像区域。
-- **💾 存储：** 通过 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 支持两种存储模式：
-    - **Filesystem（默认）：** 图像保存到服务器的 `./generated-images` 目录。
-    - **IndexedDB：** 图像直接保存在浏览器的 IndexedDB 中（非常适合 Serverless 部署）。
-    - 生成历史记录的元数据始终保存在浏览器的 Local Storage 中。
+- 默认（`fs`）：生成的图片写入项目根目录下的 `generated-images/`，并通过 `GET /api/image/[filename]` 提供访问。
+- IndexedDB（`indexeddb`）：适用于 Vercel 或其他 Serverless 环境。服务端返回 Base64 字符串（`b64_json`），客户端将解码并用 Dexie 存储为 Blob。
 
-## 🚀 快速开始（本地部署）
+安全与可选配置（环境变量）：
 
-按照以下步骤在本地运行工坊。
+- `OPENAI_API_KEY`（必需）: OpenAI API Key。
+- `OPENAI_API_BASE_URL`（可选）: 使用自定义兼容 Endpoint（例如私有推理服务）。
+- `NEXT_PUBLIC_IMAGE_STORAGE_MODE`（可选）: `fs` 或 `indexeddb`，不设置时会在 Vercel 环境默认切换为 `indexeddb`。
+- `APP_PASSWORD`（可选）: 若设置，删除等敏感 API 需要发送密码的 SHA-256 校验值（客户端会本地哈希后提交）。
 
-### 前提条件
+快速开始（本地开发）
 
-- [Node.js](https://nodejs.org/)（需要版本 20 或更高）
-- [npm](https://www.npmjs.com/)、[yarn](https://yarnpkg.com/)、[pnpm](https://pnpm.io/) 或 [bun](https://bun.sh/)
+先决条件：Node.js >= 20。
 
-### 1. 设置 API 密钥 🟢
-
-您需要一个 OpenAI API Key 才能使用此应用程序。
-
-⚠️ [您的 OpenAI Organization 需要完成验证才能使用 GPT 图像模型](https://help.openai.com/en/articles/10910291-api-organization-verification)
-
-1. 如果您没有 `.env.local` 文件，请创建一个。
-2. 将您的 OpenAI API Key 添加到 `.env.local` 文件中：
-
-```dotenv
-OPENAI_API_KEY=在此输入您的_openai_api_密钥
-```
-
-**Important：** 请确保您的 API Key 保密。`.env.local` 文件默认已包含在 `.gitignore` 中，以防止意外提交。
-
-#### 🟡 （可选）IndexedDB 模式（用于 Serverless 环境）
-
-对于文件系统为只读或临时性的环境（如 Vercel 的 Serverless Functions），您可以将应用程序配置为使用 Dexie.js 将生成的图像直接存储在浏览器的 IndexedDB 中。
-
-在您的 `.env.local` 文件中或托管服务商的界面中设置以下环境变量：
-
-```dotenv
-NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
-```
-
-当此变量设置为 `indexeddb` 时：
-
-- 服务器 API (`/api/images`) 将返回 Base64 格式的图像数据 (`b64_json`)，而不是将其保存到磁盘。
-- 客户端应用程序将对 Base64 数据进行解码，并将图像 Blob 存储在 IndexedDB 中。
-- 图像将使用 Blob URL 直接从浏览器的存储中提供。
-
-如果**未设置**此变量或其值为其他内容，应用程序将恢复为默认行为，即把图像保存到服务器文件系统的 `./generated-images` 目录。
-
-**Note：** 如果未显式设置 `NEXT_PUBLIC_IMAGE_STORAGE_MODE`，应用程序会自动检测是否在 Vercel 环境中运行（通过 `VERCEL` 或 `NEXT_PUBLIC_VERCEL_ENV` 环境变量），如果是，则默认为 `indexeddb` 模式。否则（例如在本地运行），默认为 `fs` 模式。您始终可以通过显式设置变量为 `fs` 或 `indexeddb` 来覆盖此自动行为。
-
-#### 🟡 （可选）使用自定义 API Endpoint
-
-如果您需要使用与 OpenAI 兼容的 API Endpoint（例如本地模型服务器或其他供应商），可以通过在 `.env.local` 文件中设置 `OPENAI_API_BASE_URL` 环境变量来指定其基础 URL：
-
-```dotenv
-OPENAI_API_KEY=在此输入您的_openai_api_密钥
-OPENAI_API_BASE_URL=在此输入您的兼容_api_endpoint地址
-```
-
-如果未设置 `OPENAI_API_BASE_URL`，应用程序将默认使用标准的 OpenAI API Endpoint。
-
----
-
-#### 🟡 （可选）启用密码验证
-
-```dotenv
-APP_PASSWORD=在此输入您的密码
-```
-
-当设置了 `APP_PASSWORD` 时，前端将提示您输入密码来验证请求。
-
-<p align="center">
-  <img src="./readme-images/password-dialog.jpg" alt="密码对话框截图" width="460"/>
-</p>
-
----
-
-### 2. 安装依赖 🟢
-
-在终端中导航到项目目录，并安装必要的依赖包：
+克隆仓库并安装依赖：
 
 ```bash
+git clone <repo-url>
+cd gpt-image-playground
 npm install
-# 或者
-# yarn install
-# 或者
-# pnpm install
-# 或者
-# bun install
 ```
 
-### 3. 运行开发服务器 🟢
+创建 `.env.local` 并添加至少 `OPENAI_API_KEY`：
 
-启动 Next.js 开发服务器：
+```dotenv
+OPENAI_API_KEY=在此填入你的_openai_api_key
+# 可选：
+# OPENAI_API_BASE_URL=
+# NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
+# APP_PASSWORD=你的管理密码（仅在需要时设置）
+```
+
+启动开发服务器：
 
 ```bash
 npm run dev
-# 或者
-# yarn dev
-# 或者
-# pnpm dev
-# 或者
-# bun dev
 ```
 
-### 4. 打开游乐场 🟢
+打开浏览器访问： http://localhost:3000
 
-在您的网页浏览器中打开 [http://localhost:3000](http://localhost:3000)。现在您应该可以使用 GPT 图像工坊了！
+运行/部署注意事项
+
+- Node 版本需 >= 20（package.json 中 engines 有说明）。
+- 若在 Serverless 平台（比如 Vercel）部署，建议将 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 设为 `indexeddb`，以避免平台文件系统限制。
+
+使用说明要点
+
+- 在生成模式中可选择流式（Stream）以获得逐步可视化预览；当使用 `gpt-image-2` 且启用 `stream`，服务器会以 SSE 方式推送部分预览帧与最终结果。
+- 编辑模式允许上传或粘贴图片、绘制 Mask 并提交编辑请求。
+- 历史面板会记录每次操作的参数、模型与估算成本，支持将历史图片重新发送到编辑表单或删除（需确认或密码）。
+
+开发者与贡献
+
+- 代码组织：应用位于 [src/app](src/app)；可复用组件在 [src/components](src/components)；辅助库在 [src/lib](src/lib)。
+- 如果想运行单元或集成测试，请先查看项目是否包含测试脚本并运行 `npm run test`（本仓库当前未包含测试脚本）。
+
+常见问题（FAQ）
+
+- Q: 我能使用哪个模型？
+  A: UI 支持从 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini` 中选择。不同模型在成本、输出质量和 Mask 行为上存在差异。
+- Q: 为什么图片有时无法加载？
+  A: 如果使用 `fs` 模式，确保 `generated-images/` 目录存在且服务器进程有读写权限；如果使用 `indexeddb`，请检查浏览器的存储权限与 Dexie 是否成功写入。
+
+联系我们
+如需帮助或报告问题，请在仓库打开 Issue，或联系作者 bpluo（仓库 owner）。
+
+---
+
+（此 README 基于仓库代码与当前分支扫描自动生成，要进一步调整或添加示例截图/示范流程，我可以继续更新。）

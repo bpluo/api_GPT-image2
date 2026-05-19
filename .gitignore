@@ -42,3 +42,5 @@ next-env.d.ts
 
 # generated images
 generated-images/
+/.claude/
+/.agents/
