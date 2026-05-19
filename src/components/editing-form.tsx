@@ -4,7 +4,6 @@ import { AcademicPromptPicker } from '@/components/academic-prompt-picker';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -30,7 +29,6 @@ import {
     UploadCloud,
     Lock,
     LockOpen,
-    HelpCircle,
     SquareDashed,
     Info
 } from 'lucide-react';
@@ -75,7 +73,7 @@ type EditingFormProps = {
     setSourceImagePreviewUrls: React.Dispatch<React.SetStateAction<string[]>>;
     maxImages: number;
     editPrompt: string;
-    setEditPrompt: React.Dispatch<React.SetStateAction<string>>;
+    setEditPrompt: (value: React.SetStateAction<string>) => void;
     editN: number[];
     setEditN: React.Dispatch<React.SetStateAction<number[]>>;
     editSize: EditingFormData['size'];
@@ -100,10 +98,6 @@ type EditingFormProps = {
     setEditDrawnPoints: React.Dispatch<React.SetStateAction<DrawnPoint[]>>;
     editMaskPreviewUrl: string | null;
     setEditMaskPreviewUrl: React.Dispatch<React.SetStateAction<string | null>>;
-    enableStreaming: boolean;
-    setEnableStreaming: React.Dispatch<React.SetStateAction<boolean>>;
-    partialImages: 1 | 2 | 3;
-    setPartialImages: React.Dispatch<React.SetStateAction<1 | 2 | 3>>;
     onPresetSelect?: (preset: PromptTemplate | null) => void;
 };
 
@@ -172,10 +166,6 @@ export function EditingForm({
     setEditDrawnPoints,
     editMaskPreviewUrl,
     setEditMaskPreviewUrl,
-    enableStreaming,
-    setEnableStreaming,
-    partialImages,
-    setPartialImages,
     onPresetSelect
 }: EditingFormProps) {
     const [firstImagePreviewUrl, setFirstImagePreviewUrl] = React.useState<string | null>(null);
@@ -207,13 +197,6 @@ export function EditingForm({
         setEditPrompt((current) => (current.trim() ? `${current.trim()}\n\n${preset.text}` : preset.text));
         applyPresetRecommendations(preset);
     };
-
-    // Disable streaming when editN > 1 (OpenAI limitation)
-    React.useEffect(() => {
-        if (editN[0] > 1 && enableStreaming) {
-            setEnableStreaming(false);
-        }
-    }, [editN, enableStreaming, setEnableStreaming]);
 
     // 'custom' is only valid on gpt-image-2; reset when switching to a legacy model
     React.useEffect(() => {
@@ -593,83 +576,8 @@ export function EditingForm({
                                     </TooltipContent>
                                 </Tooltip>
                             )}
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div className='flex items-center gap-2'>
-                                        <Checkbox
-                                            id='edit-enable-streaming'
-                                            checked={enableStreaming}
-                                            onCheckedChange={(checked) => setEnableStreaming(!!checked)}
-                                            disabled={isLoading || editN[0] > 1}
-                                            className='border-white/40 data-[state=checked]:border-white data-[state=checked]:bg-white data-[state=checked]:text-black disabled:cursor-not-allowed disabled:opacity-50'
-                                        />
-                                        <Label
-                                            htmlFor='edit-enable-streaming'
-                                            className={`text-sm ${editN[0] > 1 ? 'cursor-not-allowed text-white/40' : 'cursor-pointer text-white/80'}`}>
-                                            启用流式处理
-                                        </Label>
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent className='max-w-[250px]'>
-                                    {editN[0] > 1
-                                        ? '流式处理仅在生成 1 张图像时支持。'
-                                        : '在编辑过程中显示部分预览图像，提供更即时的反馈。'}
-                                </TooltipContent>
-                            </Tooltip>
                         </div>
                     </div>
-
-                    {enableStreaming && (
-                        <div className='space-y-3'>
-                            <div className='flex items-center gap-2'>
-                                <Label className='text-white'>预览图像</Label>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <HelpCircle className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
-                                    </TooltipTrigger>
-                                    <TooltipContent className='max-w-[250px]'>
-                                        每个预览图像增加约 $0.003 的成本（100 个適外输出令牌）。
-                                    </TooltipContent>
-                                </Tooltip>
-                            </div>
-                            <RadioGroup
-                                value={String(partialImages)}
-                                onValueChange={(value) => setPartialImages(Number(value) as 1 | 2 | 3)}
-                                disabled={isLoading}
-                                className='flex gap-x-5'>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='1'
-                                        id='edit-partial-1'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='edit-partial-1' className='cursor-pointer text-white/80'>
-                                        1
-                                    </Label>
-                                </div>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='2'
-                                        id='edit-partial-2'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='edit-partial-2' className='cursor-pointer text-white/80'>
-                                        2
-                                    </Label>
-                                </div>
-                                <div className='flex items-center space-x-2'>
-                                    <RadioGroupItem
-                                        value='3'
-                                        id='edit-partial-3'
-                                        className='border-white/40 text-white data-[state=checked]:border-white data-[state=checked]:text-white'
-                                    />
-                                    <Label htmlFor='edit-partial-3' className='cursor-pointer text-white/80'>
-                                        3
-                                    </Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
-                    )}
 
                     <div className='space-y-1.5'>
                         <Label htmlFor='edit-prompt' className='text-white'>

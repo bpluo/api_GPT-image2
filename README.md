@@ -3,7 +3,7 @@
 一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
 
 <p align="center">
-  <img src="./readme-images/interface.jpg" alt="界面截图" width="720"/>
+  <img src="./readme-images/interface.jpg" alt="界面截图" width="820"/>
 </p>
 
 **本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）

@@ -127,6 +127,12 @@ const migrateHistoryItem = (item: HistoryMetadata): HistoryMetadata => {
     };
 };
 
+const getActivePresetForPrompt = (preset: PromptTemplate | null, prompt: string): PromptTemplate | null => {
+    if (!preset) return null;
+
+    return prompt.includes(preset.text) ? preset : null;
+};
+
 export default function HomePage() {
     const [mode, setMode] = React.useState<'generate' | 'edit'>('generate');
     const [isPasswordRequiredByBackend, setIsPasswordRequiredByBackend] = React.useState<boolean | null>(null);
@@ -141,7 +147,7 @@ export default function HomePage() {
     const blobUrlCacheRef = React.useRef<Map<string, string>>(new Map());
     const selectedHistoryItemRef = React.useRef<HistoryMetadata | null>(null);
     const pendingEditParentRef = React.useRef<HistoryMetadata | null>(null);
-    const selectedPresetRef = React.useRef<PromptTemplate | null>(null);
+    const [selectedPreset, setSelectedPreset] = React.useState<PromptTemplate | null>(null);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = React.useState(false);
     const [passwordDialogContext, setPasswordDialogContext] = React.useState<'initial' | 'retry'>('initial');
     const [lastApiCallArgs, setLastApiCallArgs] = React.useState<[GenerationFormData | EditingFormData] | null>(null);
@@ -212,6 +218,11 @@ export default function HomePage() {
         },
         [getImageSrc]
     );
+
+    const handleModeChange = React.useCallback((nextMode: 'generate' | 'edit') => {
+        setSelectedPreset(null);
+        setMode(nextMode);
+    }, []);
 
     React.useEffect(() => {
         const cache = blobUrlCacheRef.current;
@@ -431,6 +442,8 @@ export default function HomePage() {
             const parentId = parent?.id;
             const sessionId = mode === 'edit' ? (parent?.sessionId ?? parent?.id ?? id) : id;
             const sourceImageFilenames = mode === 'edit' ? editImageFiles.map((file) => file.name) : [];
+            const prompt = mode === 'generate' ? genPrompt : editPrompt;
+            const activePreset = getActivePresetForPrompt(selectedPreset, prompt);
 
             return {
                 id,
@@ -445,17 +458,30 @@ export default function HomePage() {
                 background: mode === 'generate' ? genBackground : 'auto',
                 moderation: mode === 'generate' ? genModeration : 'auto',
                 output_format: mode === 'generate' ? genOutputFormat : 'png',
-                prompt: mode === 'generate' ? genPrompt : editPrompt,
+                prompt,
                 mode,
                 costDetails: calculateApiCost(usage, currentModel),
                 model: currentModel,
-                presetTitle: selectedPresetRef.current?.title,
-                presetCategory: selectedPresetRef.current ? '科研论文绘图' : undefined,
-                presetTags: selectedPresetRef.current?.tags,
+                presetTitle: activePreset?.title,
+                presetCategory: activePreset ? '科研论文绘图' : undefined,
+                presetTags: activePreset?.tags,
                 coverImageFilename: images[0]?.filename
             };
         },
-        [editImageFiles, editModel, editPrompt, editQuality, genBackground, genModel, genModeration, genOutputFormat, genPrompt, genQuality, mode]
+        [
+            editImageFiles,
+            editModel,
+            editPrompt,
+            editQuality,
+            genBackground,
+            genModel,
+            genModeration,
+            genOutputFormat,
+            genPrompt,
+            genQuality,
+            mode,
+            selectedPreset
+        ]
     );
 
     const finalizeImages = React.useCallback(
@@ -677,6 +703,7 @@ export default function HomePage() {
             pendingEditParentRef.current = selectedHistoryItemRef.current;
 
             if (mode === 'generate') {
+                setSelectedPreset(null);
                 setMode('edit');
             }
         } catch (err: unknown) {
@@ -690,7 +717,8 @@ export default function HomePage() {
     const executeDeleteItem = React.useCallback(
         async (item: HistoryMetadata) => {
             setError(null);
-            const { images: imagesInEntry, timestamp } = item;
+            const { images: imagesInEntry } = item;
+            const itemId = item.id;
             const storageModeUsed = item.storageModeUsed || 'fs';
             const filenamesToDelete = imagesInEntry.map((img) => img.filename);
 
@@ -723,11 +751,11 @@ export default function HomePage() {
                     failedDeletes = result.results?.filter((r) => !r.success) ?? [];
                 }
 
-                setHistory((prevHistory) => prevHistory.filter((h) => h.timestamp !== timestamp));
+                setHistory((prevHistory) => prevHistory.filter((h) => h.id !== itemId));
                 setLatestImageBatch((prev) =>
                     prev && prev.some((img) => filenamesToDelete.includes(img.filename)) ? null : prev
                 );
-                if (selectedHistoryItemRef.current?.timestamp === timestamp) {
+                if (selectedHistoryItemRef.current?.id === itemId) {
                     selectedHistoryItemRef.current = null;
                 }
                 if (failedDeletes.length > 0) {
@@ -811,14 +839,20 @@ export default function HomePage() {
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading}
                                 currentMode={mode}
-                                onModeChange={setMode}
+                                onModeChange={handleModeChange}
                                 isPasswordRequiredByBackend={isPasswordRequiredByBackend}
                                 clientPasswordHash={clientPasswordHash}
                                 onOpenPasswordDialog={handleOpenPasswordDialog}
                                 model={genModel}
                                 setModel={setGenModel}
                                 prompt={genPrompt}
-                                setPrompt={setGenPrompt}
+                                setPrompt={(value) => {
+                                    setGenPrompt((current) => {
+                                        const nextPrompt = typeof value === 'function' ? value(current) : value;
+                                        setSelectedPreset((preset) => getActivePresetForPrompt(preset, nextPrompt));
+                                        return nextPrompt;
+                                    });
+                                }}
                                 n={genN}
                                 setN={setGenN}
                                 size={genSize}
@@ -841,9 +875,7 @@ export default function HomePage() {
                                 setEnableStreaming={setEnableStreaming}
                                 partialImages={partialImages}
                                 setPartialImages={setPartialImages}
-                                onPresetSelect={(preset) => {
-                                    selectedPresetRef.current = preset;
-                                }}
+                                onPresetSelect={setSelectedPreset}
                             />
                         </div>
                         <div className={mode === 'edit' ? 'block h-full w-full' : 'hidden'}>
@@ -851,7 +883,7 @@ export default function HomePage() {
                                 onSubmit={handleApiCall}
                                 isLoading={isLoading || isSendingToEdit}
                                 currentMode={mode}
-                                onModeChange={setMode}
+                                onModeChange={handleModeChange}
                                 isPasswordRequiredByBackend={isPasswordRequiredByBackend}
                                 clientPasswordHash={clientPasswordHash}
                                 onOpenPasswordDialog={handleOpenPasswordDialog}
@@ -866,7 +898,13 @@ export default function HomePage() {
                                 setSourceImagePreviewUrls={setEditSourceImagePreviewUrls}
                                 maxImages={MAX_EDIT_IMAGES}
                                 editPrompt={editPrompt}
-                                setEditPrompt={setEditPrompt}
+                                setEditPrompt={(value) => {
+                                    setEditPrompt((current) => {
+                                        const nextPrompt = typeof value === 'function' ? value(current) : value;
+                                        setSelectedPreset((preset) => getActivePresetForPrompt(preset, nextPrompt));
+                                        return nextPrompt;
+                                    });
+                                }}
                                 editN={editN}
                                 setEditN={setEditN}
                                 editSize={editSize}
@@ -891,13 +929,7 @@ export default function HomePage() {
                                 setEditDrawnPoints={setEditDrawnPoints}
                                 editMaskPreviewUrl={editMaskPreviewUrl}
                                 setEditMaskPreviewUrl={setEditMaskPreviewUrl}
-                                enableStreaming={enableStreaming}
-                                setEnableStreaming={setEnableStreaming}
-                                partialImages={partialImages}
-                                setPartialImages={setPartialImages}
-                                onPresetSelect={(preset) => {
-                                    selectedPresetRef.current = preset;
-                                }}
+                                onPresetSelect={setSelectedPreset}
                             />
                         </div>
                     </div>

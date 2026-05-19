@@ -63,7 +63,7 @@ type GenerationFormProps = {
     model: GenerationFormData['model'];
     setModel: React.Dispatch<React.SetStateAction<GenerationFormData['model']>>;
     prompt: string;
-    setPrompt: React.Dispatch<React.SetStateAction<string>>;
+    setPrompt: (value: React.SetStateAction<string>) => void;
     n: number[];
     setN: React.Dispatch<React.SetStateAction<number[]>>;
     size: GenerationFormData['size'];
