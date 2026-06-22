@@ -95,9 +95,3 @@ npm run dev
 
 联系我们
 如需帮助或报告问题，请在仓库打开 Issue，或联系作者。
-
-NiubiStar 新活动上线：
-
-项目入驻 NiubiStar，即刻获取 30 颗冷启动加速 Star。
-
-活动页： https://niubistar.com/free-20-stars
