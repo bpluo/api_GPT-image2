@@ -119,3 +119,19 @@ npm run dev
 
 联系我们
 如需帮助或报告问题，请在仓库打开 Issue，或联系作者。
+
+## English summary
+
+GPT Image Workshop — interactive web tool for researchers and creators, built
+on OpenAI's GPT image family (supports gpt-image-2, gpt-image-1.5, gpt-image-1
+and gpt-image-1-mini). Features include image generation, mask-based edits,
+streaming previews (SSE), and local history with cost estimates.
+
+Quick start:
+
+1. Install dependencies: `npm install`
+2. Create `.env.local` with `OPENAI_API_KEY`
+3. Run: `npm run dev` and open http://localhost:3000
+
+See the Chinese sections above for detailed API routes, storage modes and
+deployment notes.
