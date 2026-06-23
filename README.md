@@ -20,6 +20,8 @@
 
 <!-- DREAMFIELD_README_HEADER_END -->
 
+<p align="right">English: [README_EN.md](README_EN.md)</p>
+
 
 
 ## <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
