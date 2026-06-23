@@ -29,7 +29,15 @@
 一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
 
 <p align="center">
-  <img src="./readme-images/interface.jpg" alt="界面截图" width="720"/>
+  <!-- Gallery: main interface + supporting screenshots -->
+  <img src="./readme-images/interface.jpg" alt="界面截图" width="620" style="margin-bottom:12px;"/>
+  <br/>
+  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="220" style="margin:6px;"/>
+  <img src="./readme-images/mask-creation.jpg" alt="Mask creation" width="220" style="margin:6px;"/>
+  <img src="./readme-images/password-dialog.jpg" alt="Password dialog" width="220" style="margin:6px;"/>
+  <br/>
+  <img src="./readme-images/history.jpg" alt="History panel" width="460" style="margin-top:12px;"/>
+  <p style="font-size:0.95rem; color:#666; margin-top:8px;">上：主界面与关键功能预览；中：成本明细、Mask 创作与密码设置弹窗；下：历史记录面板（可重放或删除操作）。</p>
 </p>
 
 **本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）
