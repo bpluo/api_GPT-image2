@@ -29,16 +29,10 @@
 一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
 
 <p align="center">
-  <!-- Gallery: main interface + supporting screenshots -->
-  <img src="./readme-images/interface.jpg" alt="界面截图" width="620" style="margin-bottom:12px;"/>
-  <br/>
-  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="220" style="margin:6px;"/>
-  <img src="./readme-images/mask-creation.jpg" alt="Mask creation" width="220" style="margin:6px;"/>
-  <img src="./readme-images/password-dialog.jpg" alt="Password dialog" width="220" style="margin:6px;"/>
-  <br/>
-  <img src="./readme-images/history.jpg" alt="History panel" width="460" style="margin-top:12px;"/>
-  <p style="font-size:0.95rem; color:#666; margin-top:8px;">上：主界面与关键功能预览；中：成本明细、Mask 创作与密码设置弹窗；下：历史记录面板（可重放或删除操作）。</p>
+  <img src="./readme-images/interface.jpg" alt="界面截图" width="860" />
 </p>
+
+> 主界面支持生成与编辑两种工作流，左侧完成提示词和参数配置，右侧实时查看输出结果。
 
 **本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）
 
@@ -52,6 +46,12 @@
 - 内置 Mask 编辑器（绘制/上传）用于局部编辑。
 - 本地历史与成本估算：每次请求记录参数、使用量与估算 USD 成本。
 - 两种图像存储模式：服务器文件系统（默认）或浏览器 IndexedDB（Dexie.js，适合 Serverless 部署）。
+
+<p align="center">
+  <img src="./readme-images/mask-creation.jpg" alt="Mask creation" width="760" />
+</p>
+
+> 编辑模式下可以直接涂抹或上传 Mask，便于对局部区域进行定点修改。
 
 技术栈与主要依赖：Next.js 16、React 19、TypeScript、TailwindCSS、shadcn/ui（Radix + lucide）、Dexie.js、openai 官方 SDK。
 
@@ -73,6 +73,12 @@
 - `OPENAI_API_BASE_URL`（可选）: 使用自定义兼容 Endpoint（例如私有推理服务）。
 - `NEXT_PUBLIC_IMAGE_STORAGE_MODE`（可选）: `fs` 或 `indexeddb`，不设置时会在 Vercel 环境默认切换为 `indexeddb`。
 - `APP_PASSWORD`（可选）: 若设置，删除等敏感 API 需要发送密码的 SHA-256 校验值（客户端会本地哈希后提交）。
+
+<p align="center">
+  <img src="./readme-images/password-dialog.jpg" alt="Password dialog" width="560" />
+</p>
+
+> 当启用 `APP_PASSWORD` 后，敏感操作会弹出密码配置对话框。
 
 快速开始（本地开发）
 
@@ -114,6 +120,18 @@ npm run dev
 - 在生成模式中可选择流式（Stream）以获得逐步可视化预览；当使用 `gpt-image-2` 且启用 `stream`，服务器会以 SSE 方式推送部分预览帧与最终结果。
 - 编辑模式允许上传或粘贴图片、绘制 Mask 并提交编辑请求。
 - 历史面板会记录每次操作的参数、模型与估算成本，支持将历史图片重新发送到编辑表单或删除（需确认或密码）。
+
+<p align="center">
+  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="560" />
+</p>
+
+> 每次请求都会显示文本输入、图像输出和总成本，便于快速估算消耗。
+
+<p align="center">
+  <img src="./readme-images/history.jpg" alt="History panel" width="860" />
+</p>
+
+> 历史记录集中展示最近的生成与编辑任务，可快速回看、重用或删除。
 
 开发者与贡献
 

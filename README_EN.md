@@ -6,6 +6,12 @@ image family (supports `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1` and
 `gpt-image-1-mini`). The project is built with Next.js, TypeScript and a
 component-driven UI.
 
+<p align="center">
+  <img src="./readme-images/interface.jpg" alt="Interface screenshot" width="860" />
+</p>
+
+> The main workspace combines prompt input, parameter controls and live output preview in a single flow.
+
 ## Key features
 
 - Image generation and mask-guided edits
@@ -14,6 +20,12 @@ component-driven UI.
 - Local history with request parameters and estimated USD cost
 - Two storage modes: server filesystem or browser IndexedDB (Dexie.js)
 - Academic prompt presets and built-in mask editor
+
+<p align="center">
+  <img src="./readme-images/mask-creation.jpg" alt="Mask creation" width="760" />
+</p>
+
+> The edit workflow supports painting or uploading a mask for precise local changes.
 
 ## Repository layout
 
@@ -75,6 +87,30 @@ Open `http://localhost:3000` in your browser.
 - `NEXT_PUBLIC_IMAGE_STORAGE_MODE` — `fs` or `indexeddb`
 - `APP_PASSWORD` — optional admin password (server verifies hashed value)
 
+<p align="center">
+  <img src="./readme-images/password-dialog.jpg" alt="Password dialog" width="560" />
+</p>
+
+> When `APP_PASSWORD` is enabled, sensitive actions prompt for a password dialog.
+
+## Usage notes
+
+- In generation mode, enabling streaming provides progressive visual feedback; when using `gpt-image-2` with `stream`, the server pushes partial preview frames and the final result via SSE.
+- Edit mode allows image upload or paste input, mask drawing, and submission of edit requests.
+- The history panel records request parameters, models and estimated cost, and lets you resend an item to the edit form or delete it with confirmation or password protection.
+
+<p align="center">
+  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="560" />
+</p>
+
+> Each request shows text input tokens, image output tokens and total estimated cost at a glance.
+
+<p align="center">
+  <img src="./readme-images/history.jpg" alt="History panel" width="860" />
+</p>
+
+> History keeps recent generation and edit jobs together for quick review, reuse or deletion.
+
 ## Deployment notes
 
 - For serverless deployments (Vercel, Netlify functions), prefer
@@ -97,12 +133,3 @@ branches after history changes.
 ## License
 
 See the repository `LICENSE` file for license terms.
-
----
-
-Short description (also present in README.md):
-
-> GPT Image Workshop — interactive web tool for researchers and creators,
-> built on OpenAI's GPT image family. Features include image generation,
-> mask-based edits, streaming previews (SSE), and local history with cost
-> estimates.
