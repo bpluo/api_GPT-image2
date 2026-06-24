@@ -1,108 +1,116 @@
-# GPT Image Workshop
+# <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image Workshop
 
-GPT Image Workshop is an interactive web application for researchers and creators.
-It provides image generation and mask-based editing powered by OpenAI's GPT
-image family (supports `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1` and
-`gpt-image-1-mini`). The project is built with Next.js, TypeScript and a
-component-driven UI.
+A web-based image generation and editing workspace built on OpenAI GPT Image models (`gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`).
 
-## Key features
+> **Note:** The workspace defaults to OpenAI's latest `gpt-image-2` model. In addition to legacy fixed sizes, it supports arbitrary resolutions up to 4K with constraint validation.
 
-- Image generation and mask-guided edits
-- Streaming preview (SSE) for step-by-step generation feedback
-- Multiple models supported (`gpt-image-2` default)
-- Local history with request parameters and estimated USD cost
-- Two storage modes: server filesystem or browser IndexedDB (Dexie.js)
-- Academic prompt presets and built-in mask editor
+<p align="center">
+  <img src="./readme-images/interface.jpg" alt="Main interface screenshot" width="600"/>
+</p>
 
-## Repository layout
+---
 
-- `src/app` — Next.js app routes and server code
-- `src/components` — React UI components
-- `src/lib` — utility modules (db, presets, cost utils)
-- `generated-images/` — default location for saved images (when using FS mode)
+## ✨ Features
 
-## API routes
+**🎨 Image generation mode**: create brand-new images from text prompts.
 
-- `POST /api/images` — create or edit images (supports SSE streaming)
-- `GET /api/image/[filename]` — read an image file when using filesystem storage
-- `POST /api/image-delete` — remove an image (optional password required)
-- `GET /api/auth-status` — check whether the app requires a password
+**🖌️ Image editing mode**: modify existing images locally with a text instruction and optional mask.
 
-## Quick start (local)
+**⚙️ Full API parameter control**: adjust the key OpenAI Images API parameters directly in the UI — model, size, output format, compression quality, background, moderation, and number of images.
 
-Prerequisites:
+**📐 Custom resolutions (gpt-image-2)**: choose from 2K / 4K presets or enter a custom width × height, with live validation against model constraints:
+- width and height must be multiples of **16**
+- max side length: **3840 px**
+- aspect ratio ≤ **3:1**
+- total pixels: **655,360 ~ 8,294,400**
 
-- Node.js >= 20
+**🎭 Integrated mask tool**: paint a mask directly on the image in edit mode, or upload an external mask image.
 
-Install and run locally:
+> ⚠️ Note: `gpt-image-1` does not yet guarantee 100% precise mask control.<br>
+> 1) [This is a known and acknowledged model limitation.](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/37)<br>
+> 2) [OpenAI plans to improve this in a future update.](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/41)
+
+<p align="center">
+  <img src="./readme-images/mask-creation.jpg" alt="Mask editor" width="350"/>
+</p>
+
+**📜 Detailed history and cost tracking**:
+- review the full history of generated and edited images
+- inspect the parameters used for each request
+- see API token usage and estimated cost in `$USD` — **tip: click the `$` amount on an image to view details**
+- view the full prompt used for each history item
+- review total historical API cost
+- delete items from history
+
+<p align="center">
+  <img src="./readme-images/history.jpg" alt="History panel" width="1306"/>
+</p>
+
+<p align="center">
+  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="350"/>
+</p>
+
+**🖼️ Flexible output view**: browse batches in a grid or open a single image for a closer look.
+
+**🚀 Send to edit**: quickly send any generated image or history item into the edit form.
+
+**📋 Paste from clipboard**: paste images directly into the source image area in edit mode.
+
+**💾 Two storage modes** via `NEXT_PUBLIC_IMAGE_STORAGE_MODE`:
+- **Filesystem (default)**: images are saved to `./generated-images` on the server
+- **IndexedDB**: images are stored directly in the browser's IndexedDB (**ideal for serverless deployments**)
+- generation history metadata is always stored in the browser's local storage
+
+---
+## 🚀 Getting started
+
+### 1. Install dependencies
 
 ```bash
-git clone https://github.com/bpluo/api_GPT-image2.git
-cd api_GPT-image2
 npm install
-cp .env.example .env.local # or create .env.local manually
 ```
 
-Create `.env.local` and set at least:
+### 2. Configure environment variables
 
-```env
-OPENAI_API_KEY=your_openai_api_key
+```dotenv
+OPENAI_API_KEY=your_openai_api_key_here
 # Optional
-# OPENAI_API_BASE_URL=
-# NEXT_PUBLIC_IMAGE_STORAGE_MODE=fs|indexeddb
-# APP_PASSWORD=
+# OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
+# NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
+# APP_PASSWORD=your_password_here
 ```
 
-Run the dev server:
+### 3. Start the dev server
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000` in your browser.
+### 4. Open the app
 
-## Storage modes
+Visit `http://localhost:3000`.
 
-- `fs` (default): generated images are written to `generated-images/`.
-- `indexeddb`: for serverless platforms — server returns `b64_json` and the
-  client stores decoded blobs in IndexedDB via Dexie.
+## ⚙️ Configuration
 
-## Environment variables
+- `OPENAI_API_KEY`: required.
+- `OPENAI_API_BASE_URL`: optional, for custom compatible endpoints.
+- `NEXT_PUBLIC_IMAGE_STORAGE_MODE`: `fs` or `indexeddb`.
+- `APP_PASSWORD`: optional, protects sensitive actions.
 
-- `OPENAI_API_KEY` — required
-- `OPENAI_API_BASE_URL` — optional, for custom endpoints
-- `NEXT_PUBLIC_IMAGE_STORAGE_MODE` — `fs` or `indexeddb`
-- `APP_PASSWORD` — optional admin password (server verifies hashed value)
+## 🚢 Deployment notes
 
-## Deployment notes
+- Node.js 20 or newer is required.
+- For serverless deployments, use `indexeddb`.
+- If you use `fs` mode, make sure `generated-images/` is writable.
 
-- For serverless deployments (Vercel, Netlify functions), prefer
-  `NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb` to avoid depending on writable
-  server filesystem.
-- Ensure `OPENAI_API_KEY` is provided in your deployment environment.
+## ❓ FAQ
 
-## Contributing
+- Which models are supported?
+  - `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`
+- Why do images sometimes fail to load?
+  - In `fs` mode, check directory write permissions.
+  - In `indexeddb` mode, check browser storage permissions.
 
-Contributions are welcome. Typical workflow:
+## 🤝 Contact
 
-1. Fork the repository
-2. Create a feature branch
-3. Open a pull request with descriptive changes
-
-Note: This repository's history may have been rewritten. If you use this
-project as a contributor, ensure you re-clone or properly reset your local
-branches after history changes.
-
-## License
-
-See the repository `LICENSE` file for license terms.
-
----
-
-Short description (also present in README.md):
-
-> GPT Image Workshop — interactive web tool for researchers and creators,
-> built on OpenAI's GPT image family. Features include image generation,
-> mask-based edits, streaming previews (SSE), and local history with cost
-> estimates.
+If you need help or want to report an issue, open one in the repository.
