@@ -18,148 +18,117 @@
   </a>
 </p>
 
+<p align="right"><a href="./README_EN.md">English</a></p>
+
 <!-- DREAMFIELD_README_HEADER_END -->
 
-<p align="right">English: [README_EN.md](README_EN.md)</p>
+# <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
 
+一个基于 OpenAI GPT Image 系列模型（`gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`）的 Web 端图像生成与编辑工作台。
 
-
-## <img src="./public/favicon.svg" alt="项目 Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT 图像工坊
-
-一个面向研究者与创作者的交互式 Web 工具，基于 OpenAI 的 GPT 图像系列模型（支持 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1` 与 `gpt-image-1-mini`），提供图像生成、基于 Mask 的编辑、流式预览与历史成本追踪功能。
+> **说明：** 工坊默认使用 OpenAI 最新的 `gpt-image-2` 模型。该模型不仅兼容旧版的固定尺寸，还支持高达 4K 的任意分辨率（含约束校验）。
 
 <p align="center">
-  <img src="./readme-images/interface.jpg" alt="界面截图" width="860" />
+  <img src="./readme-images/interface.jpg" alt="主界面截图" width="600"/>
 </p>
 
-> 主界面支持生成与编辑两种工作流，左侧完成提示词和参数配置，右侧实时查看输出结果。
+---
 
-**本仓库当前分支：** feat/update-components（参考：仓库 image2 / bpluo）
+## ✨ 功能特性
 
-**关键特性一览**
+ **🎨 图像生成模式**：通过文本提示词（Prompt）创建全新图像。
+ **🖌️ 图像编辑模式**：基于文本指令 + 可选 Mask 对已有图像进行局部修改。
+**⚙️ 完整 API 参数控制**：通过 UI 直接调整 OpenAI Images API 支持的所有关键参数——模型、尺寸、输出格式、压缩质量、背景、审核、生成数量。
+**📐 自定义分辨率（gpt-image-2）**：支持从 2K / 4K 预设中选取，或手动输入 宽×高，实时校验模型约束：
+  - 宽高均为 **16 的倍数**
+  - 单边最大 **3840 px**
+  - 宽高比 ≤ **3:1**
+  - 总像素范围 **655,360 ~ 8,294,400**
 
-- 支持生成与编辑模式（`generate` / `edit`）。
-- 流式生成与部分图像预览（Server-side SSE，客户端可显示逐步生成的预览帧）。
-- 可配置模型：`gpt-image-2`（默认）、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`。
-- 多种输出格式与压缩设置：`png` / `jpeg` / `webp`，支持输出压缩（当适用）。
-- 学术绘图预设（`AcademicPromptPicker`）：内置多种论文级别的绘图模板与提示词。
-- 内置 Mask 编辑器（绘制/上传）用于局部编辑。
-- 本地历史与成本估算：每次请求记录参数、使用量与估算 USD 成本。
-- 两种图像存储模式：服务器文件系统（默认）或浏览器 IndexedDB（Dexie.js，适合 Serverless 部署）。
+**🎭 集成 Mask 工具**：在编辑模式下，可直接在图像上涂抹以生成 Mask，也支持上传外部 Mask 图像。
+
+  > ⚠️ 请注意：`gpt-image-1` 的 Mask 编辑功能目前尚不能保证 100% 精确控制。<br>
+  > 1) [这是已知且已确认的模型局限性。](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/37)<br>
+  > 2) [OpenAI 计划在后续更新中改进此问题。](https://community.openai.com/t/gpt-image-1-problems-with-mask-edits/1240639/41)
 
 <p align="center">
-  <img src="./readme-images/mask-creation.jpg" alt="Mask creation" width="760" />
+  <img src="./readme-images/mask-creation.jpg" alt="Mask 编辑" width="350"/>
 </p>
 
-> 编辑模式下可以直接涂抹或上传 Mask，便于对局部区域进行定点修改。
-
-技术栈与主要依赖：Next.js 16、React 19、TypeScript、TailwindCSS、shadcn/ui（Radix + lucide）、Dexie.js、openai 官方 SDK。
-
-主要 API 路由（服务器端实现）：
-
-- `POST /api/images` —— 接受表单提交（生成或编辑），支持流式（SSE）与非流式响应。
-- `GET /api/image/[filename]` —— 从服务器文件系统读取单张图片（仅当使用 filesystem 存储时）。
-- `POST /api/image-delete` —— 删除指定文件（支持可选的密码验证）。
-- `GET /api/auth-status` —— 查询是否需要密码（由环境变量 `APP_PASSWORD` 决定）。
-
-存储模式说明：
-
-- 默认（`fs`）：生成的图片写入项目根目录下的 `generated-images/`，并通过 `GET /api/image/[filename]` 提供访问。
-- IndexedDB（`indexeddb`）：适用于 Vercel 或其他 Serverless 环境。服务端返回 Base64 字符串（`b64_json`），客户端将解码并用 Dexie 存储为 Blob。
-
-安全与可选配置（环境变量）：
-
-- `OPENAI_API_KEY`（必需）: OpenAI API Key。
-- `OPENAI_API_BASE_URL`（可选）: 使用自定义兼容 Endpoint（例如私有推理服务）。
-- `NEXT_PUBLIC_IMAGE_STORAGE_MODE`（可选）: `fs` 或 `indexeddb`，不设置时会在 Vercel 环境默认切换为 `indexeddb`。
-- `APP_PASSWORD`（可选）: 若设置，删除等敏感 API 需要发送密码的 SHA-256 校验值（客户端会本地哈希后提交）。
+ **📜 详细历史与成本追踪**：
+  - 查看所有图像生成与编辑的完整历史记录
+  - 每次请求的参数详情一览
+  - 详细的 API Token 用量及预估费用明细（`$USD`）——**提示：点击图像上的 `$` 金额即可查看**
+  - 查看每条历史记录对应的完整 Prompt
+  - 累计历史 API 总费用统计
+  - 支持从历史记录中删除条目
 
 <p align="center">
-  <img src="./readme-images/password-dialog.jpg" alt="Password dialog" width="560" />
+  <img src="./readme-images/history.jpg" alt="历史记录面板" width="1306"/>
 </p>
 
-> 当启用 `APP_PASSWORD` 后，敏感操作会弹出密码配置对话框。
+<p align="center">
+  <img src="./readme-images/cost-breakdown.jpg" alt="费用明细" width="350"/>
+</p>
 
-快速开始（本地开发）
+ **🖼️ 灵活的图片输出视图**：以网格形式浏览批量生成的图像，也可选中单张仔细查看。
+ **🚀 一键送编辑**：将生成结果或历史记录中的任意图像快速送入编辑模式。
+ **📋 剪贴板粘贴**：直接将剪贴板中的图像粘贴到编辑模式的源图像区域。
+ **💾 双存储模式**：通过 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 切换：
+  - **Filesystem（默认）**：图像保存在服务端的 `./generated-images` 目录
+  - **IndexedDB**：图像直接存储在浏览器 IndexedDB 中（**Serverless 部署的理想选择**）
+  - 生成历史元数据始终保存在浏览器 LocalStorage 中
 
-先决条件：Node.js >= 20。
+---
+## 🚀 使用步骤
 
-克隆仓库并安装依赖：
+### 1. 安装依赖
 
 ```bash
-git clone <repo-url>
-cd gpt-image-playground
 npm install
 ```
 
-创建 `.env.local` 并添加至少 `OPENAI_API_KEY`：
+### 2. 配置环境变量
 
 ```dotenv
-OPENAI_API_KEY=在此填入你的_openai_api_key
-# 可选：
-# OPENAI_API_BASE_URL=
+OPENAI_API_KEY=your_openai_api_key_here
+# 可选
+# OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
 # NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
-# APP_PASSWORD=你的管理密码（仅在需要时设置）
+# APP_PASSWORD=your_password_here
 ```
 
-启动开发服务器：
+### 3. 启动本地开发
 
 ```bash
 npm run dev
 ```
 
-打开浏览器访问： http://localhost:3000
+### 4. 打开应用
 
-运行/部署注意事项
+访问 `http://localhost:3000`。
 
-- Node 版本需 >= 20（package.json 中 engines 有说明）。
-- 若在 Serverless 平台（比如 Vercel）部署，建议将 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 设为 `indexeddb`，以避免平台文件系统限制。
+## ⚙️ 配置说明
 
-使用说明要点
+- `OPENAI_API_KEY`：必需。
+- `OPENAI_API_BASE_URL`：可选，自定义兼容 Endpoint。
+- `NEXT_PUBLIC_IMAGE_STORAGE_MODE`：`fs` 或 `indexeddb`。
+- `APP_PASSWORD`：可选，用于保护删除等敏感操作。
 
-- 在生成模式中可选择流式（Stream）以获得逐步可视化预览；当使用 `gpt-image-2` 且启用 `stream`，服务器会以 SSE 方式推送部分预览帧与最终结果。
-- 编辑模式允许上传或粘贴图片、绘制 Mask 并提交编辑请求。
-- 历史面板会记录每次操作的参数、模型与估算成本，支持将历史图片重新发送到编辑表单或删除（需确认或密码）。
+## 🚢 部署提示
 
-<p align="center">
-  <img src="./readme-images/cost-breakdown.jpg" alt="Cost breakdown" width="560" />
-</p>
+- Node.js 20 或更高版本。
+- Vercel 等 Serverless 环境建议使用 `indexeddb`。
+- 如果启用 `fs` 模式，请确保服务器可写入 `generated-images/`。
 
-> 每次请求都会显示文本输入、图像输出和总成本，便于快速估算消耗。
+## ❓ FAQ
 
-<p align="center">
-  <img src="./readme-images/history.jpg" alt="History panel" width="860" />
-</p>
+- 支持哪些模型？
+  - `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`
+- 为什么图片有时无法加载？
+  - `fs` 模式下检查目录写入权限。
+  - `indexeddb` 模式下检查浏览器存储权限。
 
-> 历史记录集中展示最近的生成与编辑任务，可快速回看、重用或删除。
+## 🤝 联系我们
 
-开发者与贡献
-
-- 代码组织：应用位于 [src/app](src/app)；可复用组件在 [src/components](src/components)；辅助库在 [src/lib](src/lib)。
-- 如果想运行单元或集成测试，请先查看项目是否包含测试脚本并运行 `npm run test`（本仓库当前未包含测试脚本）。
-
-常见问题（FAQ）
-
-- Q: 我能使用哪个模型？
-  A: UI 支持从 `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini` 中选择。不同模型在成本、输出质量和 Mask 行为上存在差异。
-- Q: 为什么图片有时无法加载？
-  A: 如果使用 `fs` 模式，确保 `generated-images/` 目录存在且服务器进程有读写权限；如果使用 `indexeddb`，请检查浏览器的存储权限与 Dexie 是否成功写入。
-
-联系我们
 如需帮助或报告问题，请在仓库打开 Issue，或联系作者。
-
-## English summary
-
-GPT Image Workshop — interactive web tool for researchers and creators, built
-on OpenAI's GPT image family (supports gpt-image-2, gpt-image-1.5, gpt-image-1
-and gpt-image-1-mini). Features include image generation, mask-based edits,
-streaming previews (SSE), and local history with cost estimates.
-
-Quick start:
-
-1. Install dependencies: `npm install`
-2. Create `.env.local` with `OPENAI_API_KEY`
-3. Run: `npm run dev` and open http://localhost:3000
-
-See the Chinese sections above for detailed API routes, storage modes and
-deployment notes.
