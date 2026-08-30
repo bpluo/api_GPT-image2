@@ -75,7 +75,7 @@
  **🚀 一键送编辑**：将生成结果或历史记录中的任意图像快速送入编辑模式。
  **📋 剪贴板粘贴**：直接将剪贴板中的图像粘贴到编辑模式的源图像区域。
  **💾 双存储模式**：通过 `NEXT_PUBLIC_IMAGE_STORAGE_MODE` 切换：
-  - **Filesystem（默认）**：图像保存在服务端的 `./generated-images` 目录
+  - **Filesystem（默认）**：图像保存在服务端的 `./generated-images` 目录，可用 `IMAGE_STORAGE_DIR` 改成指定目录
   - **IndexedDB**：图像直接存储在浏览器 IndexedDB 中（**Serverless 部署的理想选择**）
   - 生成历史元数据始终保存在浏览器 LocalStorage 中
 
@@ -95,6 +95,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 # 可选
 # OPENAI_API_BASE_URL=your_compatible_api_endpoint_here
 # NEXT_PUBLIC_IMAGE_STORAGE_MODE=indexeddb
+# IMAGE_STORAGE_DIR=D:\lulu\api_GPT-image2\generated-images
+# LEGACY_IMAGE_STORAGE_DIRS=D:\lulu\gpt-image-playground\generated-images
 # APP_PASSWORD=your_password_here
 ```
 
@@ -113,6 +115,8 @@ npm run dev
 - `OPENAI_API_KEY`：必需。
 - `OPENAI_API_BASE_URL`：可选，自定义兼容 Endpoint。
 - `NEXT_PUBLIC_IMAGE_STORAGE_MODE`：`fs` 或 `indexeddb`。
+- `IMAGE_STORAGE_DIR`：可选，`fs` 模式下新生成图片的写入目录。未设置时写入当前项目的 `generated-images/`。
+- `LEGACY_IMAGE_STORAGE_DIRS`：可选，迁移项目后用于读取旧图片目录；多个目录按系统分隔符分隔（Windows 用 `;`）。
 - `APP_PASSWORD`：可选，用于保护删除等敏感操作。
 
 ## 🚢 部署提示
@@ -126,8 +130,9 @@ npm run dev
 - 支持哪些模型？
   - `gpt-image-2`、`gpt-image-1.5`、`gpt-image-1`、`gpt-image-1-mini`
 - 为什么图片有时无法加载？
-  - `fs` 模式下检查目录写入权限。
-  - `indexeddb` 模式下检查浏览器存储权限。
+- `fs` 模式下检查目录写入权限。
+- 如果换过项目路径，确认旧图片目录是否加入了 `LEGACY_IMAGE_STORAGE_DIRS`，或放在同级 `gpt-image-playground/generated-images`。
+- `indexeddb` 模式下检查浏览器存储权限。
 
 ## 🤝 联系我们
 

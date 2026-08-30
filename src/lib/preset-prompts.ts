@@ -23,7 +23,18 @@ const academicStyleRules = `
 - All visible labels must be short, readable English labels. Avoid long paragraphs inside the figure.
 - Prefer publication-ready layout: clear hierarchy, consistent spacing, balanced whitespace, and figure elements that remain readable in a paper column.
 - Do not invent quantitative values, axis scales, legends, equations, dataset names, or method names. If data is missing, leave clean placeholders or visualize structure only.
-- Avoid photorealistic rendering, messy sketches, decorative 3D shadows, saturated colors, and unreadable tiny text.`;
+- Avoid photorealistic rendering, messy sketches, decorative 3D shadows, saturated colors, and unreadable tiny text.
+- Run a visual self-check before finalizing: no cropped labels, no legend covering data, aligned panel labels, readable tick labels, and no garbled text.`;
+
+const scientificChartRules = `
+
+## 科研数据图顾问规则
+- Choose the chart type from the data shape and the claim being made, not from decoration.
+- Prefer distribution-aware charts: box/violin + raw points for group comparisons; strip/dot plots for small n; scatter + regression for two continuous variables; heatmap with colorbar for matrices.
+- Avoid misleading chart types: no pie charts, 3D charts, rainbow/jet colormaps, dual y-axes, categorical line charts, or truncated y-axes without an explicit break mark.
+- If error bars, confidence bands, box plots, p-values, or significance marks appear, include short placeholder labels for SD/SEM/95% CI, n, and test method when exact information is not provided.
+- Use colorblind-safe palettes and redundant encodings such as marker shape, line style, or direct labels when comparing groups.
+- If the requested figure tries to show too many variables or claims, split it into clearly labeled panels instead of forcing everything into one crowded chart.`;
 
 export const presetPromptCategories: PromptCategory[] = [
     {
@@ -63,7 +74,7 @@ ${academicStyleRules}`
                 text: `请基于我提供的实验数据或实验目的，绘制一张严谨的论文结果图。
 
 ## 图形目标
-- 根据数据关系选择最合适的学术图表：grouped bar chart, horizontal bar chart, line chart with confidence band, heatmap, scatter plot, radar chart, box/violin plot, or qualitative comparison grid。
+- 根据数据关系和论文论点选择最合适的学术图表：horizontal/grouped bar chart, line chart with confidence band, heatmap, scatter plot, box/violin plot with raw points, distribution plot, or qualitative comparison grid。
 - 强调统计严谨性：如果我提供均值/方差/多次实验结果，请加入 error bars、confidence interval 或清晰图例。
 - 如果方法名称较长，优先使用横向条形图；如果展示训练过程，优先使用带置信区间的折线图；如果展示矩阵结果，优先使用热力图。
 
@@ -71,6 +82,7 @@ ${academicStyleRules}`
 - Strictly use only the numbers, labels, methods, datasets, and metrics I provide.
 - Do not invent values, rankings, p-values, axis ranges, legends, or baselines.
 - If exact data is not provided, create a clean chart layout template with placeholders instead of fake data.
+${scientificChartRules}
 ${academicStyleRules}`
             },
             {
@@ -145,6 +157,8 @@ ${academicStyleRules}`
 - 统一为干净的 academic vector style：白底、低饱和配色、细边框、整齐对齐、清晰箭头。
 - 改善文字可读性，将标签整理为短英文标签；不要新增我没有提供的术语或数值。
 - 清理多余背景、杂乱线条、过重阴影和不一致字体。
+- 如果原图是数据图，优先修复常见出版问题：图例遮挡、坐标标签裁切、刻度过密、缺少 colorbar、误差类型不清、子图标签不对齐、红绿配色不可分。
+${scientificChartRules}
 ${academicStyleRules}`
             }
         ]

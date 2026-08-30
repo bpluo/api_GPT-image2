@@ -1,10 +1,8 @@
 import fs from 'fs/promises';
 import { lookup } from 'mime-types';
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
 
-// Base directory where images are stored (outside nextjs-app)
-const imageBaseDir = path.resolve(process.cwd(), 'generated-images');
+import { isSafeImageFilename, resolveImageReadPath } from '@/lib/image-storage';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
     const { filename } = await params;
@@ -13,15 +11,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ error: 'Filename is required' }, { status: 400 });
     }
 
-    // Basic security: Prevent directory traversal
-    if (filename.includes('..') || filename.startsWith('/') || filename.startsWith('\\')) {
+    if (!isSafeImageFilename(filename)) {
         return NextResponse.json({ error: 'Invalid filename' }, { status: 400 });
     }
 
-    const filepath = path.join(imageBaseDir, filename);
-
     try {
-        await fs.access(filepath);
+        const filepath = await resolveImageReadPath(filename);
+        if (!filepath) {
+            return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+        }
 
         const fileBuffer = await fs.readFile(filepath);
 

@@ -4,7 +4,8 @@
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Grid, ImageIcon, Loader2, Send } from 'lucide-react';
+import { Grid, ImageIcon, ImageOff, Loader2, Send } from 'lucide-react';
+import * as React from 'react';
 
 type ImageInfo = {
     path: string;
@@ -29,6 +30,13 @@ const getGridColsClass = (count: number): string => {
     return 'grid-cols-3';
 };
 
+const MissingImage = ({ compact = false }: { compact?: boolean }) => (
+    <div className='flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/20 text-center text-muted-foreground'>
+        <ImageOff className={compact ? 'h-5 w-5' : 'h-8 w-8'} />
+        {!compact && <span className='text-sm'>图片已移走</span>}
+    </div>
+);
+
 export function ImageOutput({
     imageBatch,
     viewMode,
@@ -40,15 +48,26 @@ export function ImageOutput({
     baseImagePreviewUrl,
     streamingPreviewImages
 }: ImageOutputProps) {
+    const [failedImagePaths, setFailedImagePaths] = React.useState<Set<string>>(new Set());
+
+    React.useEffect(() => {
+        setFailedImagePaths(new Set());
+    }, [imageBatch]);
+
     const handleSendClick = () => {
         if (typeof viewMode === 'number' && imageBatch?.[viewMode]) {
             onSendToEdit(imageBatch[viewMode].filename);
         }
     };
 
+    const markImageFailed = (path: string) => {
+        setFailedImagePaths((current) => new Set(current).add(path));
+    };
+
     const showCarousel = imageBatch && imageBatch.length > 1;
     const isSingleImageView = typeof viewMode === 'number';
-    const canSendToEdit = !isLoading && isSingleImageView && imageBatch && imageBatch[viewMode];
+    const selectedImage = isSingleImageView ? imageBatch?.[viewMode] : undefined;
+    const canSendToEdit = !isLoading && !!selectedImage && !failedImagePaths.has(selectedImage.path);
 
     return (
         <div className='flex h-full min-h-[320px] w-full flex-col overflow-hidden rounded-3xl border border-border/70 bg-card/70 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl'>
@@ -114,20 +133,30 @@ export function ImageOutput({
                                     key={img.filename}
                                     onClick={() => onViewChange(index)}
                                     className='relative aspect-square overflow-hidden rounded-2xl border border-border bg-muted/20 transition hover:-translate-y-0.5 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring'>
-                                    <img
-                                        src={img.path}
-                                        alt={`生成图片 ${index + 1}`}
-                                        className='h-full w-full object-contain'
-                                    />
+                                    {failedImagePaths.has(img.path) ? (
+                                        <MissingImage compact />
+                                    ) : (
+                                        <img
+                                            src={img.path}
+                                            alt={`生成图片 ${index + 1}`}
+                                            className='h-full w-full object-contain'
+                                            onError={() => markImageFailed(img.path)}
+                                        />
+                                    )}
                                 </button>
                             ))}
                         </div>
                     ) : imageBatch[viewMode] ? (
-                        <img
-                            src={imageBatch[viewMode].path}
-                            alt={altText}
-                            className='max-h-full max-w-full object-contain p-3'
-                        />
+                        failedImagePaths.has(imageBatch[viewMode].path) ? (
+                            <MissingImage />
+                        ) : (
+                            <img
+                                src={imageBatch[viewMode].path}
+                                alt={altText}
+                                className='max-h-full max-w-full object-contain p-3'
+                                onError={() => markImageFailed(imageBatch[viewMode].path)}
+                            />
+                        )
                     ) : (
                         <div className='text-center text-muted-foreground'>
                             <p>图像显示时出错。</p>
@@ -166,11 +195,16 @@ export function ImageOutput({
                                 )}
                                 onClick={() => onViewChange(index)}
                                 aria-label={`选择图像 ${index + 1}`}>
-                                <img
-                                    src={img.path}
-                                    alt={`缩略图 ${index + 1}`}
-                                    className='h-full w-full rounded-full object-cover'
-                                />
+                                {failedImagePaths.has(img.path) ? (
+                                    <MissingImage compact />
+                                ) : (
+                                    <img
+                                        src={img.path}
+                                        alt={`缩略图 ${index + 1}`}
+                                        className='h-full w-full rounded-full object-cover'
+                                        onError={() => markImageFailed(img.path)}
+                                    />
+                                )}
                             </Button>
                         ))}
                     </div>

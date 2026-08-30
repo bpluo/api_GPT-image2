@@ -1,9 +1,8 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
-import path from 'path';
 
-const outputDir = path.resolve(process.cwd(), 'generated-images');
+import { isSafeImageFilename, resolveImageReadPath } from '@/lib/image-storage';
 
 function sha256(data: string): string {
     return crypto.createHash('sha256').update(data).digest('hex');
@@ -62,15 +61,21 @@ export async function POST(request: NextRequest) {
     const deletionResults: FileDeletionResult[] = [];
 
     for (const filename of filenames) {
-        if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        if (!isSafeImageFilename(filename)) {
             console.warn(`Invalid filename for deletion: ${filename}`);
             deletionResults.push({ filename, success: false, error: 'Invalid filename format.' });
             continue;
         }
 
-        const filepath = path.join(outputDir, filename);
+        let filepath: string | null = null;
 
         try {
+            filepath = await resolveImageReadPath(filename);
+            if (!filepath) {
+                deletionResults.push({ filename, success: false, error: 'File not found.' });
+                continue;
+            }
+
             await fs.unlink(filepath);
             console.log(`Successfully deleted image: ${filepath}`);
             deletionResults.push({ filename, success: true });

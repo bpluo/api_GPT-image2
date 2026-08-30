@@ -922,7 +922,7 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                <section className='min-h-[240px]'>
+                <section>
                     <HistoryPanel
                         history={history}
                         onSelectImage={handleHistorySelect}

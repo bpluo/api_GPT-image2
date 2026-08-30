@@ -157,6 +157,7 @@ function HistoryPanelImpl({
     const [openCostDialogId, setOpenCostDialogId] = React.useState<string | null>(null);
     const [isTotalCostDialogOpen, setIsTotalCostDialogOpen] = React.useState(false);
     const [copiedId, setCopiedId] = React.useState<string | null>(null);
+    const [failedThumbUrls, setFailedThumbUrls] = React.useState<Set<string>>(new Set());
 
     const { totalCost, totalImages } = React.useMemo(() => {
         let cost = 0;
@@ -174,6 +175,14 @@ function HistoryPanelImpl({
     const historySessions = React.useMemo(() => groupHistoryBySession(history), [history]);
     const averageCost = totalImages > 0 ? totalCost / totalImages : 0;
 
+    React.useEffect(() => {
+        setFailedThumbUrls(new Set());
+    }, [history]);
+
+    const markThumbFailed = (url: string) => {
+        setFailedThumbUrls((current) => new Set(current).add(url));
+    };
+
     const handleCopy = async (text: string | null | undefined, id: string) => {
         if (!text) return;
         try {
@@ -186,10 +195,10 @@ function HistoryPanelImpl({
     };
 
     return (
-        <Card className='flex w-full flex-col overflow-visible rounded-3xl border-border/70 bg-card/70 shadow-2xl shadow-black/20 backdrop-blur-xl'>
-            <CardHeader className='flex flex-row items-center justify-between gap-4 border-b border-border/70 px-5 py-4'>
+        <Card className='flex w-full flex-col gap-0 overflow-visible rounded-2xl border-border/70 bg-card/70 py-0 shadow-2xl shadow-black/20 backdrop-blur-xl'>
+            <CardHeader className='flex flex-row items-center justify-between gap-3 border-b border-border/70 px-4 py-3 !pb-3'>
                 <div className='flex min-w-0 items-center gap-3'>
-                    <div className='flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary'>
+                    <div className='flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary'>
                         <Clock3 className='h-4 w-4' />
                     </div>
                     <div>
@@ -233,15 +242,15 @@ function HistoryPanelImpl({
                 )}
             </CardHeader>
 
-            <CardContent className='overflow-x-auto p-5'>
+            <CardContent className='overflow-x-auto p-3'>
                 {history.length === 0 ? (
-                    <div className='flex min-h-[150px] flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/30 text-center text-muted-foreground'>
-                        <Sparkles className='mb-3 h-7 w-7 opacity-60' />
+                    <div className='flex min-h-[96px] flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-background/30 px-3 text-center text-muted-foreground'>
+                        <Sparkles className='mb-2 h-5 w-5 opacity-60' />
                         <p className='font-medium text-foreground'>还没有历史记录</p>
                         <p className='mt-1 text-sm'>生成或编辑完成后，会在这里形成可回看的创作链路。</p>
                     </div>
                 ) : (
-                    <div className='flex min-w-max gap-4 pb-2'>
+                    <div className='flex min-w-max gap-3 pb-1'>
                         {historySessions.map((session) => {
                             const genCount = session.items.filter((i) => i.mode === 'generate').length;
                             const editCount = session.items.filter((i) => i.mode === 'edit').length;
@@ -249,8 +258,8 @@ function HistoryPanelImpl({
                             return (
                                 <div
                                     key={session.id}
-                                    className='relative flex shrink-0 flex-col gap-3 rounded-3xl border border-border/70 bg-background/35 p-3 shadow-lg shadow-black/10'>
-                                    <div className='flex items-center justify-between gap-4 px-1 text-[11px] text-muted-foreground'>
+                                    className='relative flex shrink-0 flex-col gap-2 rounded-2xl border border-border/70 bg-background/35 p-2 shadow-md shadow-black/10'>
+                                    <div className='flex items-center justify-between gap-3 px-1 text-[11px] text-muted-foreground'>
                                         <div className='flex items-center gap-1.5'>
                                             <span className='font-medium text-foreground'>{genCount > 0 ? '创建链路' : '编辑链路'}</span>
                                             {editCount > 0 && <span className='text-amber-400'>+{editCount} 编辑</span>}
@@ -259,40 +268,42 @@ function HistoryPanelImpl({
                                         <div>{session.totalImages} 张 · ${session.totalCost.toFixed(4)}</div>
                                     </div>
 
-                                    <div className='flex gap-2.5'>
+                                    <div className='flex gap-2'>
                                         {session.items.map((item, index) => {
                                             const itemId = getItemId(item);
                                             const imageCount = item.images?.length ?? 0;
                                             const isMultiImage = imageCount > 1;
                                             const thumbUrl = getThumbUrl(item, getImageSrc);
                                             const isEdit = item.mode === 'edit';
+                                            const isThumbMissing = !thumbUrl || failedThumbUrls.has(thumbUrl);
 
                                             return (
-                                                <div key={itemId} className='group relative w-28 shrink-0'>
+                                                <div key={itemId} className='group relative w-36 shrink-0'>
                                                     {index > 0 && (
                                                         <div className='absolute -left-3 top-1/2 h-px w-3 bg-border' aria-hidden='true' />
                                                     )}
                                                     <button
                                                         onClick={() => onSelectImage(item)}
                                                         className={cn(
-                                                            'relative block aspect-square w-full overflow-hidden rounded-2xl border bg-muted/30 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
+                                                            'relative block aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted/30 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
                                                             isEdit ? 'border-amber-400/25' : 'border-sky-400/25'
                                                         )}
                                                         aria-label={`查看 ${new Date(item.timestamp).toLocaleString()} 的图片`}>
-                                                        {thumbUrl ? (
+                                                        {!isThumbMissing ? (
                                                             <img
                                                                 src={thumbUrl}
                                                                 alt={`预览 ${new Date(item.timestamp).toLocaleString()}`}
                                                                 className='h-full w-full object-cover transition duration-500 group-hover:scale-105'
                                                                 loading='lazy'
+                                                                onError={() => markThumbFailed(thumbUrl)}
                                                             />
                                                         ) : (
-                                                            <div className='flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground'>
+                                                            <div className='flex h-full w-full flex-col items-center justify-center gap-2 bg-background/60 text-muted-foreground'>
                                                                 <ImageOff className='h-5 w-5' />
-                                                                <span className='text-[10px]'>缺图</span>
+                                                                <span className='text-[10px]'>图片已移走</span>
                                                             </div>
                                                         )}
-                                                        <div className='absolute inset-0 bg-gradient-to-t from-black/65 via-black/5 to-transparent' />
+                                                        <div className='absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/10' />
                                                         <div
                                                             className={cn(
                                                                 'absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium text-white shadow-sm backdrop-blur',
@@ -307,21 +318,22 @@ function HistoryPanelImpl({
                                                                 {imageCount}
                                                             </div>
                                                         )}
-                                                        <div className='absolute inset-x-2 bottom-2 space-y-1 text-left'>
-                                                            {item.presetTitle && (
-                                                                <div className='inline-flex max-w-full rounded-full bg-primary/80 px-2 py-0.5 text-[10px] font-medium text-primary-foreground backdrop-blur'>
-                                                                    <span className='truncate'>{item.presetTitle}</span>
-                                                                </div>
-                                                            )}
-                                                            <p className='truncate text-[11px] font-medium text-white'>{item.prompt || '未记录提示词'}</p>
-                                                            <div className='flex items-center justify-between text-[10px] text-white/70'>
-                                                                <span>{formatHistoryTime(item.timestamp)}</span>
-                                                                <span>{formatDuration(item.durationMs)}</span>
-                                                            </div>
-                                                        </div>
                                                     </button>
 
-                                                    <div className='mt-2 flex items-center justify-center gap-1.5 opacity-80 transition group-hover:opacity-100'>
+                                                    <div className='mt-2 min-h-[58px] space-y-1 px-0.5'>
+                                                        <div className='flex items-center justify-between gap-2 text-[11px] text-muted-foreground'>
+                                                            <span className='truncate font-medium text-foreground'>
+                                                                {item.presetTitle || (isEdit ? '编辑结果' : '生成结果')}
+                                                            </span>
+                                                            <span className='shrink-0'>{formatDuration(item.durationMs)}</span>
+                                                        </div>
+                                                        <p className='line-clamp-2 text-xs leading-snug text-muted-foreground'>
+                                                            {item.prompt || '未记录提示词'}
+                                                        </p>
+                                                        <div className='text-[10px] text-muted-foreground'>{formatHistoryTime(item.timestamp)}</div>
+                                                    </div>
+
+                                                    <div className='mt-2 flex items-center justify-between gap-1.5 opacity-80 transition group-hover:opacity-100'>
                                                         <Dialog open={openPromptDialogId === itemId} onOpenChange={(o) => !o && setOpenPromptDialogId(null)}>
                                                             <DialogTrigger asChild>
                                                                 <Button

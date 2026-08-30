@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import path from 'path';
 
+import { ensurePrimaryImageDirExists, getPrimaryImageDir } from '@/lib/image-storage';
+import { validateGptImage2Size } from '@/lib/size-utils';
+
 // Streaming event types
 type StreamingEvent = {
     type: 'partial_image' | 'completed' | 'error' | 'done';
@@ -23,12 +26,9 @@ type StreamingEvent = {
     error?: string;
 };
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_API_BASE_URL
-});
-
-const outputDir = path.resolve(process.cwd(), 'generated-images');
+const outputDir = getPrimaryImageDir();
+const VALID_MODELS = ['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2'] as const;
+type ValidModel = (typeof VALID_MODELS)[number];
 
 // Define valid output formats for type safety
 const VALID_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
@@ -48,39 +48,50 @@ function validateOutputFormat(format: unknown): ValidOutputFormat {
     return 'png'; // default fallback
 }
 
-async function ensureOutputDirExists() {
-    try {
-        await fs.access(outputDir);
-    } catch (error: unknown) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
-            try {
-                await fs.mkdir(outputDir, { recursive: true });
-                console.log(`Created output directory: ${outputDir}`);
-            } catch (mkdirError) {
-                console.error(`Error creating output directory ${outputDir}:`, mkdirError);
-                throw new Error('Failed to create image output directory.');
-            }
-        } else {
-            console.error(`Error accessing output directory ${outputDir}:`, error);
-            throw new Error(
-                `Failed to access or ensure image output directory exists. Original error: ${error instanceof Error ? error.message : String(error)}`
-            );
-        }
-    }
-}
-
 function sha256(data: string): string {
     return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+function createOpenAIClient(apiKey: string) {
+    return new OpenAI({
+        apiKey,
+        baseURL: process.env.OPENAI_API_BASE_URL
+    });
+}
+
+function validateModel(model: unknown): ValidModel {
+    return VALID_MODELS.includes(model as ValidModel) ? (model as ValidModel) : 'gpt-image-2';
+}
+
+function validateImageSize(model: ValidModel, size: string): string | NextResponse {
+    if (model !== 'gpt-image-2' || size === 'auto') {
+        return size;
+    }
+
+    const match = /^(\d+)x(\d+)$/.exec(size);
+    if (!match) {
+        return NextResponse.json({ error: 'Invalid size. Expected WxH, for example 2048x2048.' }, { status: 400 });
+    }
+
+    const [, width, height] = match;
+    const validation = validateGptImage2Size(Number(width), Number(height));
+    if (!validation.valid) {
+        return NextResponse.json({ error: `Invalid gpt-image-2 size: ${validation.reason}` }, { status: 400 });
+    }
+
+    return size;
 }
 
 export async function POST(request: NextRequest) {
     console.log('Received POST request to /api/images');
 
-    if (!process.env.OPENAI_API_KEY) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
         console.error('OPENAI_API_KEY is not set.');
         return NextResponse.json({ error: 'Server configuration error: API key not found.' }, { status: 500 });
     }
     try {
+        const openai = createOpenAIClient(apiKey);
         let effectiveStorageMode: 'fs' | 'indexeddb';
         const explicitMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
         const isOnVercel = process.env.VERCEL === '1';
@@ -99,7 +110,7 @@ export async function POST(request: NextRequest) {
         );
 
         if (effectiveStorageMode === 'fs') {
-            await ensureOutputDirExists();
+            await ensurePrimaryImageDirExists();
         }
 
         const formData = await request.formData();
@@ -119,13 +130,7 @@ export async function POST(request: NextRequest) {
 
         const mode = formData.get('mode') as 'generate' | 'edit' | null;
         const prompt = formData.get('prompt') as string | null;
-        const model =
-            (formData.get('model') as
-                | 'gpt-image-1'
-                | 'gpt-image-1-mini'
-                | 'gpt-image-1.5'
-                | 'gpt-image-2'
-                | null) || 'gpt-image-2';
+        const model = validateModel(formData.get('model'));
 
         console.log(`Mode: ${mode}, Model: ${model}, Prompt: ${prompt ? prompt.substring(0, 50) + '...' : 'N/A'}`);
 
@@ -142,7 +147,10 @@ export async function POST(request: NextRequest) {
         if (mode === 'generate') {
             const n = parseInt((formData.get('n') as string) || '1', 10);
             // gpt-image-2 accepts arbitrary WxH strings that the SDK's narrow literal union doesn't express.
-            const size = ((formData.get('size') as string) || '1024x1024') as OpenAI.Images.ImageGenerateParams['size'];
+            const requestedSize = (formData.get('size') as string) || '1024x1024';
+            const validatedSize = validateImageSize(model, requestedSize);
+            if (validatedSize instanceof NextResponse) return validatedSize;
+            const size = validatedSize as OpenAI.Images.ImageGenerateParams['size'];
             const quality = (formData.get('quality') as OpenAI.Images.ImageGenerateParams['quality']) || 'auto';
             const output_format =
                 (formData.get('output_format') as OpenAI.Images.ImageGenerateParams['output_format']) || 'png';
@@ -282,7 +290,10 @@ export async function POST(request: NextRequest) {
         } else if (mode === 'edit') {
             const n = parseInt((formData.get('n') as string) || '1', 10);
             // gpt-image-2 accepts arbitrary WxH strings that the SDK's narrow literal union doesn't express.
-            const size = ((formData.get('size') as string) || 'auto') as OpenAI.Images.ImageEditParams['size'];
+            const requestedSize = (formData.get('size') as string) || 'auto';
+            const validatedSize = validateImageSize(model, requestedSize);
+            if (validatedSize instanceof NextResponse) return validatedSize;
+            const size = validatedSize as OpenAI.Images.ImageEditParams['size'];
             const quality = (formData.get('quality') as OpenAI.Images.ImageEditParams['quality']) || 'auto';
 
             const imageFiles: File[] = [];

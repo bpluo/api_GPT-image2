@@ -245,7 +245,7 @@ export function GenerationForm({
                 <ModeToggle currentMode={currentMode} onModeChange={onModeChange} />
             </CardHeader>
             <form onSubmit={handleSubmit} className='flex h-full flex-1 flex-col overflow-hidden'>
-                <CardContent className='flex-1 space-y-5 overflow-y-auto p-4'>
+                <CardContent className='flex-1 space-y-4 overflow-y-auto p-4'>
                     <div className='space-y-1.5'>
                         <Label htmlFor='model-select' className='text-white'>
                             模型
@@ -294,7 +294,7 @@ export function GenerationForm({
                                         ? '流式处理仅在生成1张图(n=1)时支持。'
                                         : !isGptImage2
                                         ? '流式处理仅 gpt-image-2 模型支持。'
-                                        : '在生成过程中显示部分预览图像，提共更具交互性的体验。'}
+                                        : '在生成过程中显示部分预览图像，提供更具交互性的体验。'}
                                 </TooltipContent>
                             </Tooltip>
                         </div>
@@ -309,7 +309,7 @@ export function GenerationForm({
                                         <HelpCircle className='h-4 w-4 cursor-help text-white/40 hover:text-white/60' />
                                     </TooltipTrigger>
                                     <TooltipContent className='max-w-[250px]'>
-                                        每个预览图像增加约 $0.003 的成本（100 个適外输出令牌）。
+                                        每个预览图像增加约 $0.003 的成本（100 个额外输出令牌）。
                                     </TooltipContent>
                                 </Tooltip>
                             </div>
@@ -369,7 +369,7 @@ export function GenerationForm({
                             onChange={(e) => setPrompt(e.target.value)}
                             required
                             disabled={isLoading}
-                            className='min-h-[80px] rounded-md border border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
+                            className='min-h-[120px] rounded-md border border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
                         />
                     </div>
 
