@@ -1,504 +1,211 @@
+import { ApiConfigError, resolveApiCredentials } from '@/lib/api-config';
+import type { GptImageModel } from '@/lib/cost-utils';
+import { IMAGE_MODELS, IMAGE_MIME_TYPES, MAX_EDIT_IMAGES, MAX_IMAGE_BYTES } from '@/lib/image-settings';
+import { ensurePrimaryImageDirExists, getPrimaryImageDir } from '@/lib/image-storage';
+import { createStreamingImageResponse, type RelayStreamEvent } from '@/lib/image-stream';
+import { createRelayClient, extractRelayError, fetchImageAsBase64 } from '@/lib/relay-api';
+import { checkAppPassword, getStorageMode } from '@/lib/server-config';
+import { validateGptImage2Size } from '@/lib/size-utils';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import path from 'path';
 
-// Streaming event types
-type StreamingEvent = {
-    type: 'partial_image' | 'completed' | 'error' | 'done';
-    index?: number;
-    partial_image_index?: number;
-    b64_json?: string;
-    filename?: string;
-    path?: string;
-    output_format?: string;
-    usage?: OpenAI.Images.ImagesResponse['usage'];
-    images?: Array<{
-        filename: string;
-        b64_json: string;
-        path?: string;
-        output_format: string;
-    }>;
-    error?: string;
-};
-
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: process.env.OPENAI_API_BASE_URL
-});
-
-const outputDir = path.resolve(process.cwd(), 'generated-images');
-
-// Define valid output formats for type safety
-const VALID_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
-type ValidOutputFormat = (typeof VALID_OUTPUT_FORMATS)[number];
-
-// Validate and normalize output format
-function validateOutputFormat(format: unknown): ValidOutputFormat {
-    const normalized = String(format || 'png').toLowerCase();
-
-    // Handle jpg -> jpeg normalization
-    const mapped = normalized === 'jpg' ? 'jpeg' : normalized;
-
-    if (VALID_OUTPUT_FORMATS.includes(mapped as ValidOutputFormat)) {
-        return mapped as ValidOutputFormat;
-    }
-
-    return 'png'; // default fallback
-}
-
-async function ensureOutputDirExists() {
-    try {
-        await fs.access(outputDir);
-    } catch (error: unknown) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
-            try {
-                await fs.mkdir(outputDir, { recursive: true });
-                console.log(`Created output directory: ${outputDir}`);
-            } catch (mkdirError) {
-                console.error(`Error creating output directory ${outputDir}:`, mkdirError);
-                throw new Error('Failed to create image output directory.');
-            }
-        } else {
-            console.error(`Error accessing output directory ${outputDir}:`, error);
-            throw new Error(
-                `Failed to access or ensure image output directory exists. Original error: ${error instanceof Error ? error.message : String(error)}`
-            );
-        }
-    }
-}
-
-function sha256(data: string): string {
-    return crypto.createHash('sha256').update(data).digest('hex');
-}
+const invalid = (error: string) => NextResponse.json({ error, code: 'VALIDATION_ERROR' }, { status: 400 });
 
 export async function POST(request: NextRequest) {
-    console.log('Received POST request to /api/images');
-
-    if (!process.env.OPENAI_API_KEY) {
-        console.error('OPENAI_API_KEY is not set.');
-        return NextResponse.json({ error: 'Server configuration error: API key not found.' }, { status: 500 });
-    }
     try {
-        let effectiveStorageMode: 'fs' | 'indexeddb';
-        const explicitMode = process.env.NEXT_PUBLIC_IMAGE_STORAGE_MODE;
-        const isOnVercel = process.env.VERCEL === '1';
-
-        if (explicitMode === 'fs') {
-            effectiveStorageMode = 'fs';
-        } else if (explicitMode === 'indexeddb') {
-            effectiveStorageMode = 'indexeddb';
-        } else if (isOnVercel) {
-            effectiveStorageMode = 'indexeddb';
-        } else {
-            effectiveStorageMode = 'fs';
+        let form: FormData;
+        try {
+            form = await request.formData();
+        } catch {
+            return invalid('请求内容无法读取，请重新提交。');
         }
-        console.log(
-            `Effective Image Storage Mode: ${effectiveStorageMode} (Explicit: ${explicitMode || 'unset'}, Vercel: ${isOnVercel})`
+        const authError = checkAppPassword(form.get('passwordHash'));
+        if (authError) return NextResponse.json(authError, { status: 401 });
+        const credentials = resolveApiCredentials(
+            { apiKey: request.headers.get('x-api-key'), baseUrl: request.headers.get('x-base-url') },
+            { apiKey: process.env.OPENAI_API_KEY, baseUrl: process.env.OPENAI_API_BASE_URL }
         );
-
-        if (effectiveStorageMode === 'fs') {
-            await ensureOutputDirExists();
-        }
-
-        const formData = await request.formData();
-
-        if (process.env.APP_PASSWORD) {
-            const clientPasswordHash = formData.get('passwordHash') as string | null;
-            if (!clientPasswordHash) {
-                console.error('Missing password hash.');
-                return NextResponse.json({ error: 'Unauthorized: Missing password hash.' }, { status: 401 });
+        const mode = form.get('mode');
+        const promptValue = form.get('prompt');
+        const prompt = typeof promptValue === 'string' ? promptValue.trim() : '';
+        if (mode !== 'generate' && mode !== 'edit') return invalid('请选择生成或编辑模式。');
+        if (!prompt) return invalid('提示词不能为空，请描述画面或修改内容。');
+        const model = String(form.get('model') || 'gpt-image-2') as GptImageModel;
+        if (!IMAGE_MODELS.includes(model)) return invalid('不支持此模型，请从模型列表中重新选择。');
+        const n = Number(form.get('n') || 1);
+        if (!Number.isInteger(n) || n < 1 || n > 10) return invalid('每次生成的图片数量需为 1 至 10 张。');
+        const quality = String(form.get('quality') || 'auto') as 'auto' | 'low' | 'medium' | 'high';
+        if (!['auto', 'low', 'medium', 'high'].includes(quality)) return invalid('图像质量参数无效。');
+        const size = String(form.get('size') || 'auto');
+        if (size !== 'auto') {
+            const match = /^(\d+)x(\d+)$/.exec(size);
+            if (!match) return invalid('尺寸格式无效，请使用“宽x高”，例如 2048x2048。');
+            if (model === 'gpt-image-2') {
+                const validation = validateGptImage2Size(Number(match[1]), Number(match[2]));
+                if (!validation.valid) return invalid(validation.reason);
+            } else if (
+                ['gpt-image-1', 'gpt-image-1.5', 'gpt-image-1-mini'].includes(model) &&
+                !['1024x1024', '1536x1024', '1024x1536'].includes(size)
+            ) {
+                return invalid('当前模型不支持此尺寸，请重新选择画面比例。');
             }
-            const serverPasswordHash = sha256(process.env.APP_PASSWORD);
-            if (clientPasswordHash !== serverPasswordHash) {
-                console.error('Invalid password hash.');
-                return NextResponse.json({ error: 'Unauthorized: Invalid password.' }, { status: 401 });
-            }
         }
-
-        const mode = formData.get('mode') as 'generate' | 'edit' | null;
-        const prompt = formData.get('prompt') as string | null;
-        const model =
-            (formData.get('model') as
-                | 'gpt-image-1'
-                | 'gpt-image-1-mini'
-                | 'gpt-image-1.5'
-                | 'gpt-image-2'
-                | null) || 'gpt-image-2';
-
-        console.log(`Mode: ${mode}, Model: ${model}, Prompt: ${prompt ? prompt.substring(0, 50) + '...' : 'N/A'}`);
-
-        if (!mode || !prompt) {
-            return NextResponse.json({ error: 'Missing required parameters: mode and prompt' }, { status: 400 });
-        }
-
-        // Check for streaming mode
-        const streamEnabled = formData.get('stream') === 'true';
-        const partialImagesCount = parseInt((formData.get('partial_images') as string) || '2', 10);
-
-        let result: OpenAI.Images.ImagesResponse;
-
+        const streaming = form.get('stream') === 'true';
+        const partial = Number(form.get('partial_images') || 2);
+        if (streaming && (n !== 1 || model !== 'gpt-image-2'))
+            return invalid('逐步预览仅支持 gpt-image-2，每次生成 1 张。');
+        if (streaming && (!Number.isInteger(partial) || partial < 1 || partial > 3))
+            return invalid('预览次数需为 1 至 3 次。');
+        const storageMode = getStorageMode();
+        const outputDir = getPrimaryImageDir();
+        const openai = createRelayClient(credentials.apiKey, credentials.baseUrl);
+        let outputFormat: 'png' | 'jpeg' | 'webp' = 'png';
+        let params: OpenAI.Images.ImageGenerateParams | OpenAI.Images.ImageEditParams;
         if (mode === 'generate') {
-            const n = parseInt((formData.get('n') as string) || '1', 10);
-            // gpt-image-2 accepts arbitrary WxH strings that the SDK's narrow literal union doesn't express.
-            const size = ((formData.get('size') as string) || '1024x1024') as OpenAI.Images.ImageGenerateParams['size'];
-            const quality = (formData.get('quality') as OpenAI.Images.ImageGenerateParams['quality']) || 'auto';
-            const output_format =
-                (formData.get('output_format') as OpenAI.Images.ImageGenerateParams['output_format']) || 'png';
-            const output_compression_str = formData.get('output_compression') as string | null;
-            const background =
-                (formData.get('background') as OpenAI.Images.ImageGenerateParams['background']) || 'auto';
-            const moderation =
-                (formData.get('moderation') as OpenAI.Images.ImageGenerateParams['moderation']) || 'auto';
-
-            const baseParams = {
+            outputFormat = String(form.get('output_format') || 'png').replace(/^jpg$/, 'jpeg') as
+                | 'png'
+                | 'jpeg'
+                | 'webp';
+            if (!['png', 'jpeg', 'webp'].includes(outputFormat)) return invalid('请选择 PNG、JPEG 或 WebP 格式。');
+            const background = String(form.get('background') || 'auto') as 'auto' | 'opaque' | 'transparent';
+            const moderation = String(form.get('moderation') || 'auto') as 'auto' | 'low';
+            if (!['auto', 'opaque', 'transparent'].includes(background) || !['auto', 'low'].includes(moderation))
+                return invalid('背景或审核参数无效。');
+            if (background === 'transparent' && (model === 'gpt-image-2' || outputFormat === 'jpeg'))
+                return invalid('当前模型或格式不支持透明背景，请调整背景设置。');
+            const compression = Number(form.get('output_compression') ?? 100);
+            if (outputFormat !== 'png' && (!Number.isInteger(compression) || compression < 0 || compression > 100))
+                return invalid('压缩质量需为 0 至 100。');
+            params = {
                 model,
                 prompt,
-                n: Math.max(1, Math.min(n || 1, 10)),
-                size,
+                n,
+                size: size as OpenAI.Images.ImageGenerateParams['size'],
                 quality,
-                output_format,
+                output_format: outputFormat,
                 background,
-                moderation
+                moderation,
+                ...(outputFormat !== 'png' ? { output_compression: compression } : {})
             };
-
-            if ((output_format === 'jpeg' || output_format === 'webp') && output_compression_str) {
-                const compression = parseInt(output_compression_str, 10);
-                if (!isNaN(compression) && compression >= 0 && compression <= 100) {
-                    (baseParams as OpenAI.Images.ImageGenerateParams).output_compression = compression;
-                }
-            }
-
-            // Handle streaming mode for generation
-            if (streamEnabled) {
-                const actualPartialImages = Math.max(1, Math.min(partialImagesCount, 3)) as 1 | 2 | 3;
-
-                const streamParams = {
-                    ...baseParams,
-                    stream: true as const,
-                    partial_images: actualPartialImages
-                };
-
-                const stream = await openai.images.generate(streamParams);
-
-                // Create SSE response
-                const encoder = new TextEncoder();
-                const timestamp = Date.now();
-                const fileExtension = validateOutputFormat(output_format);
-
-                const readableStream = new ReadableStream({
-                    async start(controller) {
-                        try {
-                            const completedImages: Array<{
-                                filename: string;
-                                b64_json: string;
-                                path?: string;
-                                output_format: string;
-                            }> = [];
-                            let finalUsage: OpenAI.Images.ImagesResponse['usage'] | undefined;
-                            let imageIndex = 0;
-
-                            for await (const event of stream) {
-                                if (event.type === 'image_generation.partial_image') {
-                                    const partialEvent: StreamingEvent = {
-                                        type: 'partial_image',
-                                        index: imageIndex,
-                                        partial_image_index: event.partial_image_index,
-                                        b64_json: event.b64_json
-                                    };
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(partialEvent)}\n\n`));
-                                } else if (event.type === 'image_generation.completed') {
-                                    const currentIndex = imageIndex;
-                                    const filename = `${timestamp}-${currentIndex}.${fileExtension}`;
-
-                                    // Save to filesystem if in fs mode
-                                    if (effectiveStorageMode === 'fs' && event.b64_json) {
-                                        const buffer = Buffer.from(event.b64_json, 'base64');
-                                        const filepath = path.join(outputDir, filename);
-                                        await fs.writeFile(filepath, buffer);
-                                        console.log(`Streaming: Saved image ${filename}`);
-                                    }
-
-                                    const imageData = {
-                                        filename,
-                                        b64_json: event.b64_json || '',
-                                        output_format: fileExtension,
-                                        ...(effectiveStorageMode === 'fs' ? { path: `/api/image/${filename}` } : {})
-                                    };
-                                    completedImages.push(imageData);
-
-                                    const completedEvent: StreamingEvent = {
-                                        type: 'completed',
-                                        index: currentIndex,
-                                        filename,
-                                        b64_json: event.b64_json,
-                                        path: effectiveStorageMode === 'fs' ? `/api/image/${filename}` : undefined,
-                                        output_format: fileExtension
-                                    };
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(completedEvent)}\n\n`));
-
-                                    imageIndex++;
-
-                                    // Capture usage from completed event if available
-                                    if ('usage' in event && event.usage) {
-                                        finalUsage = event.usage as OpenAI.Images.ImagesResponse['usage'];
-                                    }
-                                }
-                            }
-
-                            // Send final done event with all images and usage
-                            const doneEvent: StreamingEvent = {
-                                type: 'done',
-                                images: completedImages,
-                                usage: finalUsage
-                            };
-                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`));
-                            controller.close();
-                        } catch (error) {
-                            console.error('Streaming error:', error);
-                            const errorEvent: StreamingEvent = {
-                                type: 'error',
-                                error: error instanceof Error ? error.message : 'Streaming error occurred'
-                            };
-                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
-                            controller.close();
-                        }
-                    }
-                });
-
-                return new Response(readableStream, {
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        'Connection': 'keep-alive'
-                    }
-                });
-            }
-
-            const params: OpenAI.Images.ImageGenerateParams = baseParams;
-            console.log('Calling OpenAI generate with params:', params);
-            result = await openai.images.generate(params);
-        } else if (mode === 'edit') {
-            const n = parseInt((formData.get('n') as string) || '1', 10);
-            // gpt-image-2 accepts arbitrary WxH strings that the SDK's narrow literal union doesn't express.
-            const size = ((formData.get('size') as string) || 'auto') as OpenAI.Images.ImageEditParams['size'];
-            const quality = (formData.get('quality') as OpenAI.Images.ImageEditParams['quality']) || 'auto';
-
-            const imageFiles: File[] = [];
-            for (const [key, value] of formData.entries()) {
-                if (key.startsWith('image_') && value instanceof File) {
-                    imageFiles.push(value);
-                }
-            }
-
-            if (imageFiles.length === 0) {
-                return NextResponse.json({ error: 'No image file provided for editing.' }, { status: 400 });
-            }
-
-            const maskFile = formData.get('mask') as File | null;
-
-            const baseEditParams = {
+        } else {
+            const imageFiles = [...form.entries()]
+                .filter(([name, value]) => /^image_\d+$/.test(name) && value instanceof File)
+                .sort(([left], [right]) => Number(left.slice(6)) - Number(right.slice(6)))
+                .map(([, file]) => file as File);
+            if (!imageFiles.length || imageFiles.length > MAX_EDIT_IMAGES)
+                return invalid(`请添加 1 至 ${MAX_EDIT_IMAGES} 张编辑图片。`);
+            if (
+                imageFiles.some(
+                    (file) => !IMAGE_MIME_TYPES.includes(file.type) || file.size === 0 || file.size > MAX_IMAGE_BYTES
+                )
+            )
+                return invalid('编辑图片需为有效的 PNG、JPEG 或 WebP，每张小于 50 MB。');
+            const mask = form.get('mask');
+            if (
+                mask !== null &&
+                (!(mask instanceof File) || mask.type !== 'image/png' || mask.size === 0 || mask.size > MAX_IMAGE_BYTES)
+            )
+                return invalid('遮罩需为有效的 PNG 图片，且小于 50 MB。');
+            params = {
                 model,
                 prompt,
+                n,
                 image: imageFiles,
-                n: Math.max(1, Math.min(n || 1, 10)),
-                size: size === 'auto' ? undefined : size,
-                quality: quality === 'auto' ? undefined : quality
+                size: size as OpenAI.Images.ImageEditParams['size'],
+                quality,
+                ...(mask instanceof File ? { mask } : {})
             };
-
-            // Handle streaming mode for editing
-            if (streamEnabled) {
-                console.log('Calling OpenAI edit with streaming, params:', {
-                    ...baseEditParams,
-                    stream: true,
-                    partial_images: partialImagesCount,
-                    image: `[${imageFiles.map((f) => f.name).join(', ')}]`,
-                    mask: maskFile ? maskFile.name : 'N/A'
-                });
-
-                const streamEditParams = {
-                    ...baseEditParams,
-                    stream: true as const,
-                    partial_images: Math.max(1, Math.min(partialImagesCount, 3)) as 1 | 2 | 3,
-                    ...(maskFile ? { mask: maskFile } : {})
-                };
-
-                const stream = await openai.images.edit(streamEditParams);
-
-                // Create SSE response for edit
-                const encoder = new TextEncoder();
-                const timestamp = Date.now();
-                const fileExtension = 'png'; // Edit mode always outputs PNG
-
-                const readableStream = new ReadableStream({
-                    async start(controller) {
-                        try {
-                            const completedImages: Array<{
-                                filename: string;
-                                b64_json: string;
-                                path?: string;
-                                output_format: string;
-                            }> = [];
-                            let finalUsage: OpenAI.Images.ImagesResponse['usage'] | undefined;
-                            let imageIndex = 0;
-
-                            for await (const event of stream) {
-                                if (event.type === 'image_edit.partial_image') {
-                                    const partialEvent: StreamingEvent = {
-                                        type: 'partial_image',
-                                        index: imageIndex,
-                                        partial_image_index: event.partial_image_index,
-                                        b64_json: event.b64_json
-                                    };
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(partialEvent)}\n\n`));
-                                } else if (event.type === 'image_edit.completed') {
-                                    const currentIndex = imageIndex;
-                                    const filename = `${timestamp}-${currentIndex}.${fileExtension}`;
-
-                                    // Save to filesystem if in fs mode
-                                    if (effectiveStorageMode === 'fs' && event.b64_json) {
-                                        const buffer = Buffer.from(event.b64_json, 'base64');
-                                        const filepath = path.join(outputDir, filename);
-                                        await fs.writeFile(filepath, buffer);
-                                        console.log(`Streaming edit: Saved image ${filename}`);
-                                    }
-
-                                    const imageData = {
-                                        filename,
-                                        b64_json: event.b64_json || '',
-                                        output_format: fileExtension,
-                                        ...(effectiveStorageMode === 'fs' ? { path: `/api/image/${filename}` } : {})
-                                    };
-                                    completedImages.push(imageData);
-
-                                    const completedEvent: StreamingEvent = {
-                                        type: 'completed',
-                                        index: currentIndex,
-                                        filename,
-                                        b64_json: event.b64_json,
-                                        path: effectiveStorageMode === 'fs' ? `/api/image/${filename}` : undefined,
-                                        output_format: fileExtension
-                                    };
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(completedEvent)}\n\n`));
-
-                                    imageIndex++;
-
-                                    // Capture usage from completed event if available
-                                    if ('usage' in event && event.usage) {
-                                        finalUsage = event.usage as OpenAI.Images.ImagesResponse['usage'];
-                                    }
-                                }
-                            }
-
-                            // Send final done event with all images and usage
-                            const doneEvent: StreamingEvent = {
-                                type: 'done',
-                                images: completedImages,
-                                usage: finalUsage
-                            };
-                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`));
-                            controller.close();
-                        } catch (error) {
-                            console.error('Streaming edit error:', error);
-                            const errorEvent: StreamingEvent = {
-                                type: 'error',
-                                error: error instanceof Error ? error.message : 'Streaming error occurred'
-                            };
-                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`));
-                            controller.close();
-                        }
-                    }
-                });
-
-                return new Response(readableStream, {
-                    headers: {
-                        'Content-Type': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        'Connection': 'keep-alive'
-                    }
-                });
-            }
-
-            const params: OpenAI.Images.ImageEditParams = {
-                ...baseEditParams,
-                ...(maskFile ? { mask: maskFile } : {})
-            };
-
-            console.log('Calling OpenAI edit with params:', {
-                ...params,
-                image: `[${imageFiles.map((f) => f.name).join(', ')}]`,
-                mask: maskFile ? maskFile.name : 'N/A'
+        }
+        request.signal.throwIfAborted();
+        if (storageMode === 'fs') await ensurePrimaryImageDirExists();
+        if (streaming) {
+            const stream =
+                mode === 'generate'
+                    ? await openai.images.generate(
+                          { ...(params as OpenAI.Images.ImageGenerateParams), stream: true, partial_images: partial },
+                          { signal: request.signal }
+                      )
+                    : await openai.images.edit(
+                          { ...(params as OpenAI.Images.ImageEditParams), stream: true, partial_images: partial },
+                          { signal: request.signal }
+                      );
+            return createStreamingImageResponse(stream as unknown as AsyncIterable<RelayStreamEvent>, {
+                outputDir,
+                fileExtension: outputFormat,
+                saveToDisk: storageMode === 'fs',
+                signal: request.signal,
+                onCancel: () => stream.controller.abort()
             });
-            result = await openai.images.edit(params);
-        } else {
-            return NextResponse.json({ error: 'Invalid mode specified' }, { status: 400 });
         }
-
-        console.log('OpenAI API call successful.');
-
-        if (!result || !Array.isArray(result.data) || result.data.length === 0) {
-            console.error('Invalid or empty data received from OpenAI API:', result);
-            return NextResponse.json({ error: 'Failed to retrieve image data from API.' }, { status: 500 });
-        }
-
-        const savedImagesData = await Promise.all(
-            result.data.map(async (imageData, index) => {
-                if (!imageData.b64_json) {
-                    console.error(`Image data ${index} is missing b64_json.`);
-                    throw new Error(`Image data at index ${index} is missing base64 data.`);
+        const result =
+            mode === 'generate'
+                ? await openai.images.generate(
+                      { ...(params as OpenAI.Images.ImageGenerateParams), stream: false, response_format: 'b64_json' },
+                      { signal: request.signal }
+                  )
+                : await openai.images.edit(
+                      { ...(params as OpenAI.Images.ImageEditParams), stream: false, response_format: 'b64_json' },
+                      { signal: request.signal }
+                  );
+        const relayError = extractRelayError(result);
+        if (relayError) return NextResponse.json({ error: relayError, code: 'UPSTREAM_ERROR' }, { status: 502 });
+        if (!result || !Array.isArray(result.data) || !result.data.length)
+            return NextResponse.json(
+                { error: '图像服务未返回图片，请检查模型和接口设置。', code: 'EMPTY_RESULT' },
+                { status: 502 }
+            );
+        const prefix = `${Date.now()}-${crypto.randomUUID()}`;
+        const processed = await Promise.allSettled(
+            result.data.map(async (image, index) => {
+                request.signal.throwIfAborted();
+                const base64 =
+                    image.b64_json || (image.url ? await fetchImageAsBase64(image.url, request.signal) : null);
+                if (!base64) throw new Error('图像服务返回了不完整的图片数据。');
+                const filename = `${prefix}-${index}.${outputFormat}`;
+                if (storageMode === 'fs') {
+                    await fs.writeFile(path.join(outputDir, filename), Buffer.from(base64, 'base64'));
+                    return { filename, path: `/api/image/${filename}`, output_format: outputFormat };
                 }
-                const buffer = Buffer.from(imageData.b64_json, 'base64');
-                const timestamp = Date.now();
-
-                const fileExtension = validateOutputFormat(formData.get('output_format'));
-                const filename = `${timestamp}-${index}.${fileExtension}`;
-
-                if (effectiveStorageMode === 'fs') {
-                    const filepath = path.join(outputDir, filename);
-                    console.log(`Attempting to save image to: ${filepath}`);
-                    await fs.writeFile(filepath, buffer);
-                    console.log(`Successfully saved image: ${filename}`);
-                } else {
-                }
-
-                const imageResult: { filename: string; b64_json: string; path?: string; output_format: string } = {
-                    filename: filename,
-                    b64_json: imageData.b64_json,
-                    output_format: fileExtension
-                };
-
-                if (effectiveStorageMode === 'fs') {
-                    imageResult.path = `/api/image/${filename}`;
-                }
-
-                return imageResult;
+                return { filename, b64_json: base64, output_format: outputFormat };
             })
         );
-
-        console.log(`All images processed. Mode: ${effectiveStorageMode}`);
-
-        return NextResponse.json({ images: savedImagesData, usage: result.usage });
-    } catch (error: unknown) {
-        console.error('Error in /api/images:', error);
-
-        let errorMessage = 'An unexpected error occurred.';
-        let status = 500;
-
-        if (error instanceof Error) {
-            errorMessage = error.message;
-            if (typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number') {
-                status = error.status;
-            }
-        } else if (typeof error === 'object' && error !== null) {
-            if ('message' in error && typeof error.message === 'string') {
-                errorMessage = error.message;
-            }
-            if ('status' in error && typeof error.status === 'number') {
-                status = error.status;
-            }
+        request.signal.throwIfAborted();
+        const images = processed.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+        if (!images.length) {
+            throw new Error('返回的图片未能读取或保存，请检查接口和存储配置后重试。');
         }
-
-        return NextResponse.json({ error: errorMessage }, { status });
+        const expected = Math.max(n, result.data.length);
+        const warning =
+            images.length < expected
+                ? `本次请求 ${expected} 张图片，已保留 ${images.length} 张可用结果；其余图片未返回或未能保存。`
+                : undefined;
+        return NextResponse.json({ images, usage: result.usage, storageMode, warning });
+    } catch (error) {
+        if (request.signal.aborted)
+            return NextResponse.json({ error: '请求已取消。', code: 'REQUEST_CANCELLED' }, { status: 499 });
+        if (error instanceof ApiConfigError)
+            return NextResponse.json({ error: error.message, code: error.code }, { status: 400 });
+        const upstreamStatus =
+            error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
+                ? error.status
+                : 502;
+        const status = upstreamStatus >= 400 && upstreamStatus <= 599 ? upstreamStatus : 502;
+        const code =
+            status === 401 || status === 403
+                ? 'UPSTREAM_AUTH_ERROR'
+                : status === 429
+                  ? 'UPSTREAM_RATE_LIMIT'
+                  : 'UPSTREAM_ERROR';
+        const detail = error instanceof Error ? error.message.slice(0, 1000) : '服务暂时无法响应，请稍后重试。';
+        const message =
+            code === 'UPSTREAM_AUTH_ERROR'
+                ? `图像服务拒绝了 API 密钥，请检查 API 设置。${detail}`
+                : status === 429
+                  ? `请求过于频繁或额度不足，请检查服务商账户后重试。${detail}`
+                  : detail;
+        return NextResponse.json({ error: message, code }, { status });
     }
 }

@@ -1,3 +1,5 @@
+> 版本说明：本文保留旧版英文文档，尚未同步当前模板和交互流程。当前功能、安装方式与配置请以 [README.md](README.md) 为准。
+
 # <img src="./public/favicon.svg" alt="Project Logo" width="30" height="30" style="vertical-align: middle; margin-right: 8px;"> GPT Image Workshop
 
 A web-based image generation and editing workspace built on OpenAI GPT Image models (`gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, `gpt-image-1-mini`).

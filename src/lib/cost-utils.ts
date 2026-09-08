@@ -1,4 +1,4 @@
-type ApiUsage = {
+export type ApiUsage = {
     input_tokens_details?: {
         text_tokens?: number;
         image_tokens?: number;
@@ -33,7 +33,16 @@ const GPT_IMAGE_2_TEXT_INPUT_COST_PER_TOKEN = 0.000005; // $5.00/1M
 const GPT_IMAGE_2_IMAGE_INPUT_COST_PER_TOKEN = 0.000008; // $8.00/1M
 const GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN = 0.00003; // $30.00/1M
 
-export type GptImageModel = 'gpt-image-1' | 'gpt-image-1-mini' | 'gpt-image-1.5' | 'gpt-image-2';
+// gpt-image-1/2 series plus relay-station models (pie-xian's agnes series, gwlink's 4K variant).
+// Relay models fall back to gpt-image-1 rates below — actual billing is decided by the station.
+export type GptImageModel =
+    | 'gpt-image-1'
+    | 'gpt-image-1-mini'
+    | 'gpt-image-1.5'
+    | 'gpt-image-2'
+    | 'gpt-image-2-高质量4k'
+    | 'agnes-image-2.5-flash'
+    | 'agnes-image-2.1-flash';
 
 export type ModelRates = {
     textInputPerToken: number;
@@ -95,54 +104,24 @@ export function calculateApiCost(
     usage: ApiUsage | undefined | null,
     model: GptImageModel = 'gpt-image-2'
 ): CostDetails | null {
-    if (!usage || !usage.input_tokens_details || usage.output_tokens === undefined || usage.output_tokens === null) {
-        console.warn('Invalid or missing usage data for cost calculation:', usage);
+    if (!['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2'].includes(model)) return null;
+    if (!usage?.input_tokens_details || usage.output_tokens === undefined || usage.output_tokens === null) return null;
+    const text = usage.input_tokens_details.text_tokens ?? 0;
+    const image = usage.input_tokens_details.image_tokens ?? 0;
+    const output = usage.output_tokens;
+    if ([text, image, output].some((tokens) => typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens < 0))
         return null;
-    }
-
-    const textInT = usage.input_tokens_details.text_tokens ?? 0;
-    const imgInT = usage.input_tokens_details.image_tokens ?? 0;
-    const imgOutT = usage.output_tokens ?? 0;
-
-    // Basic validation for token types
-    if (typeof textInT !== 'number' || typeof imgInT !== 'number' || typeof imgOutT !== 'number') {
-        console.error('Invalid token types in usage data:', usage);
-        return null;
-    }
-
-    // Select pricing based on model
-    let textInputCost: number;
-    let imageInputCost: number;
-    let imageOutputCost: number;
-
-    if (model === 'gpt-image-1-mini') {
-        textInputCost = GPT_IMAGE_1_MINI_TEXT_INPUT_COST_PER_TOKEN;
-        imageInputCost = GPT_IMAGE_1_MINI_IMAGE_INPUT_COST_PER_TOKEN;
-        imageOutputCost = GPT_IMAGE_1_MINI_IMAGE_OUTPUT_COST_PER_TOKEN;
-    } else if (model === 'gpt-image-1.5') {
-        textInputCost = GPT_IMAGE_1_5_TEXT_INPUT_COST_PER_TOKEN;
-        imageInputCost = GPT_IMAGE_1_5_IMAGE_INPUT_COST_PER_TOKEN;
-        imageOutputCost = GPT_IMAGE_1_5_IMAGE_OUTPUT_COST_PER_TOKEN;
-    } else if (model === 'gpt-image-2') {
-        textInputCost = GPT_IMAGE_2_TEXT_INPUT_COST_PER_TOKEN;
-        imageInputCost = GPT_IMAGE_2_IMAGE_INPUT_COST_PER_TOKEN;
-        imageOutputCost = GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN;
-    } else {
-        // Default to gpt-image-1
-        textInputCost = GPT_IMAGE_1_TEXT_INPUT_COST_PER_TOKEN;
-        imageInputCost = GPT_IMAGE_1_IMAGE_INPUT_COST_PER_TOKEN;
-        imageOutputCost = GPT_IMAGE_1_IMAGE_OUTPUT_COST_PER_TOKEN;
-    }
-
-    const costUSD = textInT * textInputCost + imgInT * imageInputCost + imgOutT * imageOutputCost;
-
-    // Round to 4 decimal places
-    const costRounded = Math.round(costUSD * 10000) / 10000;
-
+    const rates = getModelRates(model);
     return {
-        estimated_cost_usd: costRounded,
-        text_input_tokens: textInT,
-        image_input_tokens: imgInT,
-        image_output_tokens: imgOutT
+        estimated_cost_usd:
+            Math.round(
+                (text * rates.textInputPerToken +
+                    image * rates.imageInputPerToken +
+                    output * rates.imageOutputPerToken) *
+                    10000
+            ) / 10000,
+        text_input_tokens: text,
+        image_input_tokens: image,
+        image_output_tokens: output
     };
 }

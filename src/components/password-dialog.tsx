@@ -10,75 +10,85 @@ import {
     DialogTitle
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 import * as React from 'react';
-
-interface PasswordDialogProps {
-    isOpen: boolean;
-    onOpenChange: (isOpen: boolean) => void;
-    onSave: (password: string) => void;
-    title?: string;
-    description?: string;
-}
 
 export function PasswordDialog({
     isOpen,
     onOpenChange,
     onSave,
-    title = '配置密码',
-    description
-}: PasswordDialogProps) {
-    const [currentPassword, setCurrentPassword] = React.useState('');
-    const inputRef = React.useRef<HTMLInputElement>(null);
-
-    const handleSave = () => {
-        inputRef.current?.blur();
-        onSave(currentPassword);
-        setCurrentPassword('');
-        onOpenChange(false);
-    };
-
-    const handleDialogClose = (open: boolean) => {
-        if (!open) {
-            setCurrentPassword('');
+    title = '访问密码',
+    description = '此工作台需要访问密码。验证后会继续刚才的操作。'
+}: {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSave: (password: string) => void | Promise<void>;
+    title?: string;
+    description?: string;
+}) {
+    const [password, setPassword] = React.useState('');
+    const [saving, setSaving] = React.useState(false);
+    const [error, setError] = React.useState<string | null>(null);
+    React.useEffect(() => {
+        if (isOpen) {
+            setPassword('');
+            setError(null);
         }
-        onOpenChange(open);
-    };
-
+    }, [isOpen]);
     return (
-        <Dialog open={isOpen} onOpenChange={handleDialogClose}>
-            <DialogContent className='border-white/20 bg-black text-white sm:max-w-[425px]'>
+        <Dialog
+            open={isOpen}
+            onOpenChange={(open) => {
+                if (!saving) onOpenChange(open);
+            }}>
+            <DialogContent className='sm:max-w-[425px]'>
                 <DialogHeader>
-                    <DialogTitle className='text-white'>{title}</DialogTitle>
-                    {description && <DialogDescription className='text-white/60'>{description}</DialogDescription>}
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
-                <div className='grid gap-4 py-4'>
-                    <div className='grid grid-cols-1 items-center gap-4'>
+                <form
+                    className='space-y-4'
+                    onSubmit={async (event) => {
+                        event.preventDefault();
+                        if (!password.trim() || saving) return;
+                        setSaving(true);
+                        setError(null);
+                        try {
+                            await onSave(password);
+                            setPassword('');
+                        } catch (cause) {
+                            setError(cause instanceof Error ? cause.message : '密码保存失败，请重试。');
+                        } finally {
+                            setSaving(false);
+                        }
+                    }}>
+                    <div className='space-y-2'>
+                        <Label htmlFor='workspace-password'>访问密码</Label>
                         <Input
-                            ref={inputRef}
-                            id='password-input'
+                            id='workspace-password'
                             type='password'
-                            placeholder='输入你的密码'
-                            value={currentPassword}
-                            onChange={(e) => setCurrentPassword(e.target.value)}
-                            className='col-span-1 border-white/20 bg-black text-white placeholder:text-white/40 focus:border-white/50 focus:ring-white/50'
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && currentPassword.trim()) {
-                                    e.preventDefault();
-                                    handleSave();
-                                }
-                            }}
+                            autoComplete='current-password'
+                            value={password}
+                            disabled={saving}
+                            onChange={(event) => setPassword(event.target.value)}
+                            placeholder='输入工作台的访问密码'
                         />
                     </div>
-                </div>
-                <DialogFooter>
-                    <Button
-                        type='button'
-                        onClick={handleSave}
-                        disabled={!currentPassword.trim()}
-                        className='bg-white px-6 text-black hover:bg-white/90 disabled:bg-white/10 disabled:text-white/40'>
-                        保存
-                    </Button>
-                </DialogFooter>
+                    {error && (
+                        <p role='alert' className='text-destructive text-sm'>
+                            {error}
+                        </p>
+                    )}
+                    <DialogFooter>
+                        <Button type='button' variant='outline' disabled={saving} onClick={() => onOpenChange(false)}>
+                            取消
+                        </Button>
+                        <Button type='submit' disabled={!password.trim() || saving}>
+                            {saving && <Loader2 className='h-4 w-4 animate-spin' />}保存并继续
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     );

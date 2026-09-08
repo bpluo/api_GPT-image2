@@ -1,38 +1,42 @@
 'use client';
 
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { ImageMode } from '@/lib/image-settings';
+import { cn } from '@/lib/utils';
+import { Pencil, Sparkles } from 'lucide-react';
 
-type ModeToggleProps = {
-    currentMode: 'generate' | 'edit';
-    onModeChange: (mode: 'generate' | 'edit') => void;
-};
-
-export function ModeToggle({ currentMode, onModeChange }: ModeToggleProps) {
+export function ModeToggle({
+    currentMode,
+    onModeChange,
+    disabled = false
+}: {
+    currentMode: ImageMode;
+    onModeChange: (mode: ImageMode) => void;
+    disabled?: boolean;
+}) {
     return (
-        <Tabs
-            value={currentMode}
-            onValueChange={(value) => onModeChange(value as 'generate' | 'edit')}
-            className='w-auto'>
-            <TabsList className='grid h-auto grid-cols-2 gap-1 rounded-md border-none bg-transparent p-0'>
-                <TabsTrigger
-                    value='generate'
-                    className={`rounded-md border px-3 py-1 text-sm transition-colors ${
-                        currentMode === 'generate'
-                            ? 'border-white bg-white text-black'
-                            : 'border-dashed border-white/30 bg-transparent text-white/60 hover:border-white/50 hover:text-white/80'
-                    } `}>
-                    Generate
-                </TabsTrigger>
-                <TabsTrigger
-                    value='edit'
-                    className={`rounded-md border px-3 py-1 text-sm transition-colors ${
-                        currentMode === 'edit'
-                            ? 'border-white bg-white text-black'
-                            : 'border-dashed border-white/30 bg-transparent text-white/60 hover:border-white/50 hover:text-white/80'
-                    } `}>
-                    Edit
-                </TabsTrigger>
-            </TabsList>
-        </Tabs>
+        <div role='group' aria-label='创作模式' className='bg-background/65 grid grid-cols-2 gap-1 rounded-xl p-1'>
+            {(
+                [
+                    { mode: 'generate', label: '生成图片', Icon: Sparkles },
+                    { mode: 'edit', label: '编辑图片', Icon: Pencil }
+                ] as const
+            ).map(({ mode, label, Icon }) => (
+                <button
+                    key={mode}
+                    type='button'
+                    aria-pressed={currentMode === mode}
+                    disabled={disabled}
+                    onClick={() => onModeChange(mode)}
+                    className={cn(
+                        'focus-visible:ring-ring flex min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:ring-2 disabled:opacity-60',
+                        currentMode === mode
+                            ? 'bg-card text-primary ring-border shadow-sm ring-1'
+                            : 'text-muted-foreground hover:text-foreground'
+                    )}>
+                    <Icon className='h-4 w-4' />
+                    {label}
+                </button>
+            ))}
+        </div>
     );
 }
