@@ -1,476 +1,415 @@
 'use client';
 
-/* eslint-disable @next/next/no-img-element */
-
-import type { HistoryMetadata } from '@/app/page';
+import { StoredImage } from '@/components/stored-image';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
-    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle,
-    DialogTrigger
+    DialogTitle
 } from '@/components/ui/dialog';
-import { getModelRates, type GptImageModel } from '@/lib/cost-utils';
+import { Input } from '@/components/ui/input';
+import { groupHistoryBySession, type HistoryMetadata } from '@/lib/history';
+import { getRequestSize } from '@/lib/image-settings';
 import { cn } from '@/lib/utils';
-import { Check, Clock3, Copy, DollarSign, ImageOff, Layers, Pencil, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Clock3, Copy, Download, FileText, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import * as React from 'react';
 
-type HistoryPanelProps = {
-    history: HistoryMetadata[];
-    onSelectImage: (item: HistoryMetadata) => void;
-    onClearHistory: () => void;
-    getImageSrc: (filename: string) => string | undefined;
-    onDeleteItemRequest: (item: HistoryMetadata) => void;
-    itemPendingDeleteConfirmation: HistoryMetadata | null;
-    onConfirmDeletion: () => void;
-    onCancelDeletion: () => void;
-    deletePreferenceDialogValue: boolean;
-    onDeletePreferenceDialogChange: (isChecked: boolean) => void;
-};
-
-type HistorySession = {
-    id: string;
-    items: HistoryMetadata[];
-    startTimestamp: number;
-    endTimestamp: number;
-    totalCost: number;
-    totalImages: number;
-};
-
-const getItemId = (item: HistoryMetadata) => item.id || `${item.timestamp}`;
-
-const formatDuration = (ms: number): string => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-};
-
-const formatHistoryTime = (timestamp: number): string => {
+function formatTime(timestamp: number) {
     return new Intl.DateTimeFormat('zh-CN', {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
-    }).format(new Date(timestamp));
-};
+    }).format(timestamp);
+}
 
-const calculateCost = (value: number, rate: number): string => {
-    const cost = value * rate;
-    return Number.isNaN(cost) ? 'N/A' : cost.toFixed(4);
-};
-
-const makeSession = (id: string, item: HistoryMetadata): HistorySession => ({
-    id,
-    items: [item],
-    startTimestamp: item.timestamp,
-    endTimestamp: item.timestamp,
-    totalCost: item.costDetails?.estimated_cost_usd ?? 0,
-    totalImages: item.images?.length ?? 0
-});
-
-const appendToSession = (session: HistorySession, item: HistoryMetadata) => {
-    session.items.push(item);
-    session.startTimestamp = Math.min(session.startTimestamp, item.timestamp);
-    session.endTimestamp = Math.max(session.endTimestamp, item.timestamp);
-    session.totalCost += item.costDetails?.estimated_cost_usd ?? 0;
-    session.totalImages += item.images?.length ?? 0;
-};
-
-const groupHistoryBySession = (items: HistoryMetadata[]): HistorySession[] => {
-    const sorted = [...items].sort((a, b) => a.timestamp - b.timestamp);
-    const sessionMap = new Map<string, HistorySession>();
-    const itemToSession = new Map<string, string>();
-    const fallbackSessions: HistorySession[] = [];
-
-    for (const item of sorted) {
-        const itemId = getItemId(item);
-        const explicitSessionId = item.sessionId || (item.parentId ? itemToSession.get(item.parentId) : undefined);
-
-        if (explicitSessionId) {
-            const existingSession = sessionMap.get(explicitSessionId);
-            if (existingSession) {
-                appendToSession(existingSession, item);
-            } else {
-                sessionMap.set(explicitSessionId, makeSession(explicitSessionId, item));
-            }
-            itemToSession.set(itemId, explicitSessionId);
-            continue;
-        }
-
-        if (item.mode === 'generate') {
-            const id = item.sessionId || itemId;
-            sessionMap.set(id, makeSession(id, item));
-            itemToSession.set(itemId, id);
-            continue;
-        }
-
-        const sourceNames = new Set([...(item.sourceImageFilenames ?? []), ...(item.images?.map((img) => img.filename) ?? [])]);
-        const matchedSession = [...sessionMap.values(), ...fallbackSessions]
-            .reverse()
-            .find((session) =>
-                session.items.some((sessionItem) =>
-                    sessionItem.images?.some((img) => sourceNames.has(img.filename)) ||
-                    sessionItem.sourceImageFilenames?.some((filename) => sourceNames.has(filename))
-                )
-            );
-
-        if (matchedSession) {
-            appendToSession(matchedSession, item);
-            itemToSession.set(itemId, matchedSession.id);
-        } else {
-            const fallbackSession = makeSession(itemId, item);
-            fallbackSessions.push(fallbackSession);
-            itemToSession.set(itemId, itemId);
-        }
-    }
-
-    return [...sessionMap.values(), ...fallbackSessions]
-        .map((session) => ({ ...session, items: [...session.items].sort((a, b) => a.timestamp - b.timestamp) }))
-        .sort((a, b) => b.endTimestamp - a.endTimestamp);
-};
-
-const getThumbUrl = (item: HistoryMetadata, getImageSrc: (filename: string) => string | undefined) => {
-    const filename = item.coverImageFilename || item.images?.[0]?.filename;
-    if (!filename) return undefined;
-    return (item.storageModeUsed || 'fs') === 'indexeddb' ? getImageSrc(filename) : `/api/image/${filename}`;
-};
-
-function HistoryPanelImpl({
+export function HistoryPanel({
     history,
-    onSelectImage,
-    onClearHistory,
-    getImageSrc,
-    onDeleteItemRequest,
-    itemPendingDeleteConfirmation,
-    onConfirmDeletion,
-    onCancelDeletion,
-    deletePreferenceDialogValue,
-    onDeletePreferenceDialogChange
-}: HistoryPanelProps) {
-    const [openPromptDialogId, setOpenPromptDialogId] = React.useState<string | null>(null);
-    const [openCostDialogId, setOpenCostDialogId] = React.useState<string | null>(null);
-    const [isTotalCostDialogOpen, setIsTotalCostDialogOpen] = React.useState(false);
-    const [copiedId, setCopiedId] = React.useState<string | null>(null);
-    const [failedThumbUrls, setFailedThumbUrls] = React.useState<Set<string>>(new Set());
-
-    const { totalCost, totalImages } = React.useMemo(() => {
-        let cost = 0;
-        let images = 0;
-        for (const item of history) {
-            if (item.costDetails) cost += item.costDetails.estimated_cost_usd;
-            images += item.images?.length ?? 0;
-        }
-        return {
-            totalCost: Math.round(cost * 10000) / 10000,
-            totalImages: images
-        };
-    }, [history]);
-
-    const historySessions = React.useMemo(() => groupHistoryBySession(history), [history]);
-    const averageCost = totalImages > 0 ? totalCost / totalImages : 0;
-
+    selectedId,
+    disabled,
+    onSelect,
+    onRestore,
+    onDelete,
+    onClear,
+    confirmDeletion,
+    onConfirmDeletionChange
+}: {
+    history: HistoryMetadata[];
+    selectedId?: string;
+    disabled: boolean;
+    onSelect: (item: HistoryMetadata) => void;
+    onRestore: (item: HistoryMetadata) => void;
+    onDelete: (item: HistoryMetadata) => void;
+    onClear: () => void;
+    confirmDeletion: boolean;
+    onConfirmDeletionChange: (enabled: boolean) => void;
+}) {
+    const [query, setQuery] = React.useState('');
+    const [filter, setFilter] = React.useState<'all' | 'generate' | 'edit'>('all');
+    const [grouped, setGrouped] = React.useState(false);
+    const [limit, setLimit] = React.useState(24);
+    const [detail, setDetail] = React.useState<HistoryMetadata | null>(null);
+    const [copied, setCopied] = React.useState(false);
+    const [copyError, setCopyError] = React.useState(false);
+    const copyTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(
+        () => () => {
+            if (copyTimer.current) clearTimeout(copyTimer.current);
+        },
+        []
+    );
     React.useEffect(() => {
-        setFailedThumbUrls(new Set());
-    }, [history]);
-
-    const markThumbFailed = (url: string) => {
-        setFailedThumbUrls((current) => new Set(current).add(url));
-    };
-
-    const handleCopy = async (text: string | null | undefined, id: string) => {
-        if (!text) return;
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopiedId(id);
-            setTimeout(() => setCopiedId(null), 1500);
-        } catch (err) {
-            console.error('Failed to copy text: ', err);
-        }
+        setLimit(24);
+    }, [query, filter]);
+    const filtered = React.useMemo(() => {
+        const search = query.trim().toLowerCase();
+        return history.filter(
+            (item) =>
+                (filter === 'all' || item.mode === filter) &&
+                (!search ||
+                    [item.prompt, item.model, item.presetTitle, item.presetCategory, ...(item.presetTags || [])]
+                        .join(' ')
+                        .toLowerCase()
+                        .includes(search))
+        );
+    }, [history, query, filter]);
+    const visible = filtered.slice(0, limit);
+    const groups = grouped ? groupHistoryBySession(visible) : [{ id: 'recent', items: visible, endTimestamp: 0 }];
+    const totalImages = history.reduce((total, item) => total + item.images.length, 0);
+    const knownCost = history.reduce((total, item) => total + (item.costDetails?.estimated_cost_usd || 0), 0);
+    const exportHistory = () => {
+        const url = URL.createObjectURL(
+            new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), history }, null, 2)], {
+                type: 'application/json'
+            })
+        );
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `image-workshop-history-${new Date().toISOString().slice(0, 10)}.json`;
+        anchor.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
     return (
-        <Card className='flex w-full flex-col gap-0 overflow-visible rounded-2xl border-border/70 bg-card/70 py-0 shadow-2xl shadow-black/20 backdrop-blur-xl'>
-            <CardHeader className='flex flex-row items-center justify-between gap-3 border-b border-border/70 px-4 py-3 !pb-3'>
-                <div className='flex min-w-0 items-center gap-3'>
-                    <div className='flex h-8 w-8 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary'>
-                        <Clock3 className='h-4 w-4' />
-                    </div>
+        <section aria-label='历史记录' className='border-border bg-card min-w-0 rounded-2xl border'>
+            <div className='border-border flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-5'>
+                <div className='flex items-center gap-3'>
+                    <Clock3 className='text-primary h-5 w-5' />
                     <div>
-                        <CardTitle className='text-lg font-semibold'>历史记录</CardTitle>
-                        <div className='mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground'>
-                            <span>{history.length} 条记录</span>
-                            <span>·</span>
-                            <span>{historySessions.length} 条链路</span>
-                            {totalCost > 0 && (
-                                <Dialog open={isTotalCostDialogOpen} onOpenChange={setIsTotalCostDialogOpen}>
-                                    <DialogTrigger asChild>
-                                        <button className='rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-300 transition hover:bg-emerald-500/20'>
-                                            总费用 ${totalCost.toFixed(4)}
-                                        </button>
-                                    </DialogTrigger>
-                                    <DialogContent className='sm:max-w-[450px]'>
-                                        <DialogHeader>
-                                            <DialogTitle>总费用简析</DialogTitle>
-                                            <DialogDescription>历史记录中的估算费用，仅用于参考。</DialogDescription>
-                                        </DialogHeader>
-                                        <div className='space-y-2 text-sm text-muted-foreground'>
-                                            <div className='flex justify-between'><span>历史图像总数</span><span>{totalImages.toLocaleString()}</span></div>
-                                            <div className='flex justify-between'><span>平均单图成本</span><span>${averageCost.toFixed(4)}</span></div>
-                                            <div className='flex justify-between font-medium text-foreground'><span>估计总费用</span><span>${totalCost.toFixed(4)}</span></div>
-                                        </div>
-                                        <DialogFooter>
-                                            <DialogClose asChild>
-                                                <Button type='button' variant='secondary' size='sm'>关闭</Button>
-                                            </DialogClose>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            )}
-                        </div>
+                        <h2 className='text-base font-semibold'>历史记录</h2>
+                        <p className='text-muted-foreground mt-1 text-xs'>
+                            {history.length} 次创作 · {totalImages} 张图片
+                            {knownCost > 0 && ` · 已知费用估算 $${knownCost.toFixed(4)}`}
+                        </p>
                     </div>
                 </div>
                 {history.length > 0 && (
-                    <Button variant='ghost' size='sm' onClick={onClearHistory} className='rounded-full text-muted-foreground'>
-                        清空
-                    </Button>
-                )}
-            </CardHeader>
-
-            <CardContent className='overflow-x-auto p-3'>
-                {history.length === 0 ? (
-                    <div className='flex min-h-[96px] flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-background/30 px-3 text-center text-muted-foreground'>
-                        <Sparkles className='mb-2 h-5 w-5 opacity-60' />
-                        <p className='font-medium text-foreground'>还没有历史记录</p>
-                        <p className='mt-1 text-sm'>生成或编辑完成后，会在这里形成可回看的创作链路。</p>
+                    <div className='flex gap-1'>
+                        <Button
+                            type='button'
+                            variant='ghost'
+                            size='sm'
+                            onClick={exportHistory}
+                            title='导出提示词、参数和历史信息，不包含图片文件'>
+                            <Download className='h-4 w-4' />
+                            导出记录
+                        </Button>
+                        <Button
+                            type='button'
+                            variant='ghost'
+                            size='sm'
+                            disabled={disabled}
+                            onClick={onClear}
+                            className='text-muted-foreground hover:text-destructive'>
+                            清空历史
+                        </Button>
                     </div>
-                ) : (
-                    <div className='flex min-w-max gap-3 pb-1'>
-                        {historySessions.map((session) => {
-                            const genCount = session.items.filter((i) => i.mode === 'generate').length;
-                            const editCount = session.items.filter((i) => i.mode === 'edit').length;
-
-                            return (
+                )}
+            </div>
+            {history.length === 0 ? (
+                <div className='flex flex-col items-center gap-2 px-5 py-9 text-center'>
+                    <Clock3 className='text-muted-foreground/60 mb-1 h-6 w-6' />
+                    <p className='text-sm font-medium'>你的作品会留在这里</p>
+                    <p className='text-muted-foreground text-xs leading-5'>
+                        完成第一次创作后，可以查看图片、复用参数或继续编辑。
+                    </p>
+                </div>
+            ) : (
+                <>
+                    <div className='flex flex-wrap items-center gap-3 p-4 sm:px-5'>
+                        <div className='text-muted-foreground flex items-center gap-2 text-xs'>
+                            <Checkbox
+                                id='history-confirm-deletion'
+                                checked={confirmDeletion}
+                                disabled={disabled}
+                                onCheckedChange={(value) => onConfirmDeletionChange(value === true)}
+                            />
+                            <label htmlFor='history-confirm-deletion'>删除前确认</label>
+                        </div>
+                        <div className='relative min-w-[160px] flex-1'>
+                            <Search className='text-muted-foreground pointer-events-none absolute top-3 left-3 h-4 w-4' />
+                            <Input
+                                aria-label='搜索历史记录'
+                                placeholder='搜索提示词、模板或模型'
+                                value={query}
+                                onChange={(event) => setQuery(event.target.value)}
+                                className='h-10 pr-9 pl-9'
+                            />
+                            {query && (
+                                <button
+                                    type='button'
+                                    aria-label='清除搜索'
+                                    onClick={() => setQuery('')}
+                                    className='text-muted-foreground absolute top-1 right-1 h-8 w-8 rounded p-2'>
+                                    <X className='h-4 w-4' />
+                                </button>
+                            )}
+                        </div>
+                        <select
+                            aria-label='筛选创作类型'
+                            value={filter}
+                            onChange={(event) => setFilter(event.target.value as typeof filter)}
+                            className='border-border bg-background h-10 rounded-lg border px-3 text-sm'>
+                            <option value='all'>全部类型</option>
+                            <option value='generate'>生成图片</option>
+                            <option value='edit'>编辑图片</option>
+                        </select>
+                        <Button
+                            type='button'
+                            variant={grouped ? 'secondary' : 'outline'}
+                            size='sm'
+                            aria-pressed={grouped}
+                            onClick={() => setGrouped(!grouped)}>
+                            创作分组
+                        </Button>
+                    </div>
+                    {filtered.length === 0 ? (
+                        <div className='px-5 py-8 text-center'>
+                            <p className='text-muted-foreground text-sm'>没有找到匹配的记录</p>
+                            <Button
+                                type='button'
+                                variant='link'
+                                onClick={() => {
+                                    setQuery('');
+                                    setFilter('all');
+                                }}>
+                                清除筛选
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className='space-y-5 px-4 pb-5 sm:px-5'>
+                            {groups.map((group) => (
                                 <div
-                                    key={session.id}
-                                    className='relative flex shrink-0 flex-col gap-2 rounded-2xl border border-border/70 bg-background/35 p-2 shadow-md shadow-black/10'>
-                                    <div className='flex items-center justify-between gap-3 px-1 text-[11px] text-muted-foreground'>
-                                        <div className='flex items-center gap-1.5'>
-                                            <span className='font-medium text-foreground'>{genCount > 0 ? '创建链路' : '编辑链路'}</span>
-                                            {editCount > 0 && <span className='text-amber-400'>+{editCount} 编辑</span>}
-                                            {session.items.length > 1 && <span>· {session.items.length} 步</span>}
+                                    key={group.id}
+                                    className={grouped ? 'border-border space-y-3 rounded-xl border p-3' : ''}>
+                                    {grouped && (
+                                        <div className='text-muted-foreground flex flex-wrap justify-between gap-2 text-xs'>
+                                            <span>
+                                                {formatTime(group.endTimestamp)} · {group.items.length} 次创作
+                                            </span>
+                                            <span>生成与后续编辑保留在同一组</span>
                                         </div>
-                                        <div>{session.totalImages} 张 · ${session.totalCost.toFixed(4)}</div>
-                                    </div>
-
-                                    <div className='flex gap-2'>
-                                        {session.items.map((item, index) => {
-                                            const itemId = getItemId(item);
-                                            const imageCount = item.images?.length ?? 0;
-                                            const isMultiImage = imageCount > 1;
-                                            const thumbUrl = getThumbUrl(item, getImageSrc);
-                                            const isEdit = item.mode === 'edit';
-                                            const isThumbMissing = !thumbUrl || failedThumbUrls.has(thumbUrl);
-
-                                            return (
-                                                <div key={itemId} className='group relative w-36 shrink-0'>
-                                                    {index > 0 && (
-                                                        <div className='absolute -left-3 top-1/2 h-px w-3 bg-border' aria-hidden='true' />
-                                                    )}
-                                                    <button
-                                                        onClick={() => onSelectImage(item)}
-                                                        className={cn(
-                                                            'relative block aspect-[4/3] w-full overflow-hidden rounded-xl border bg-muted/30 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background',
-                                                            isEdit ? 'border-amber-400/25' : 'border-sky-400/25'
-                                                        )}
-                                                        aria-label={`查看 ${new Date(item.timestamp).toLocaleString()} 的图片`}>
-                                                        {!isThumbMissing ? (
-                                                            <img
-                                                                src={thumbUrl}
-                                                                alt={`预览 ${new Date(item.timestamp).toLocaleString()}`}
-                                                                className='h-full w-full object-cover transition duration-500 group-hover:scale-105'
-                                                                loading='lazy'
-                                                                onError={() => markThumbFailed(thumbUrl)}
-                                                            />
-                                                        ) : (
-                                                            <div className='flex h-full w-full flex-col items-center justify-center gap-2 bg-background/60 text-muted-foreground'>
-                                                                <ImageOff className='h-5 w-5' />
-                                                                <span className='text-[10px]'>图片已移走</span>
-                                                            </div>
-                                                        )}
-                                                        <div className='absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-black/10' />
-                                                        <div
-                                                            className={cn(
-                                                                'absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium text-white shadow-sm backdrop-blur',
-                                                                isEdit ? 'bg-amber-500/80' : 'bg-sky-500/80'
-                                                            )}>
-                                                            {isEdit ? <Pencil size={10} /> : <Sparkles size={10} />}
-                                                            {isEdit ? '编辑' : '创建'}
+                                    )}
+                                    <div className='grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6'>
+                                        {group.items.map((item) => (
+                                            <article
+                                                key={item.id}
+                                                className={cn(
+                                                    'bg-background/35 min-w-0 overflow-hidden rounded-xl border transition-colors',
+                                                    selectedId === item.id
+                                                        ? 'border-primary ring-primary/30 ring-1'
+                                                        : 'border-border'
+                                                )}>
+                                                <button
+                                                    type='button'
+                                                    disabled={disabled}
+                                                    onClick={() => onSelect(item)}
+                                                    aria-label={`查看作品：${item.prompt.slice(0, 40) || formatTime(item.timestamp)}`}
+                                                    aria-pressed={selectedId === item.id}
+                                                    className='bg-muted/20 focus-visible:ring-ring relative block aspect-[4/3] w-full overflow-hidden focus-visible:ring-2 focus-visible:ring-inset'>
+                                                    <StoredImage
+                                                        filename={item.coverImageFilename || item.images[0].filename}
+                                                        storageMode={item.storageModeUsed}
+                                                        alt={item.prompt || '历史作品'}
+                                                        className='h-full w-full object-cover'
+                                                    />
+                                                    <span className='absolute top-2 left-2 rounded-md bg-black/65 px-1.5 py-1 text-[10px] text-white'>
+                                                        {item.mode === 'edit' ? '编辑' : '生成'}
+                                                        {item.images.length > 1 && ` · ${item.images.length} 张`}
+                                                    </span>
+                                                </button>
+                                                <div className='space-y-2 p-2.5'>
+                                                    <p className='line-clamp-2 min-h-9 text-xs leading-[18px] break-words'>
+                                                        {item.prompt || '未记录提示词'}
+                                                    </p>
+                                                    <p className='text-muted-foreground text-[10px]'>
+                                                        {formatTime(item.timestamp)} ·{' '}
+                                                        {(item.durationMs / 1000).toFixed(0)} 秒
+                                                    </p>
+                                                    <div className='flex flex-wrap items-center justify-between gap-1'>
+                                                        <Button
+                                                            type='button'
+                                                            variant='ghost'
+                                                            size='sm'
+                                                            className='h-8 px-1.5 text-xs'
+                                                            onClick={() => {
+                                                                setDetail(item);
+                                                                setCopied(false);
+                                                                setCopyError(false);
+                                                            }}>
+                                                            <FileText className='h-3.5 w-3.5' />
+                                                            详情
+                                                        </Button>
+                                                        <div className='flex'>
+                                                            <Button
+                                                                type='button'
+                                                                variant='ghost'
+                                                                size='icon'
+                                                                className='h-8 w-8'
+                                                                disabled={disabled}
+                                                                aria-label='复用此作品的提示词和参数'
+                                                                onClick={() => onRestore(item)}>
+                                                                <RotateCcw className='h-3.5 w-3.5' />
+                                                            </Button>
+                                                            <Button
+                                                                type='button'
+                                                                variant='ghost'
+                                                                size='icon'
+                                                                className='text-muted-foreground hover:text-destructive h-8 w-8'
+                                                                disabled={disabled}
+                                                                aria-label='删除此作品'
+                                                                onClick={() => onDelete(item)}>
+                                                                <Trash2 className='h-3.5 w-3.5' />
+                                                            </Button>
                                                         </div>
-                                                        {isMultiImage && (
-                                                            <div className='absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] text-white backdrop-blur'>
-                                                                <Layers size={10} />
-                                                                {imageCount}
-                                                            </div>
-                                                        )}
-                                                    </button>
-
-                                                    <div className='mt-2 min-h-[58px] space-y-1 px-0.5'>
-                                                        <div className='flex items-center justify-between gap-2 text-[11px] text-muted-foreground'>
-                                                            <span className='truncate font-medium text-foreground'>
-                                                                {item.presetTitle || (isEdit ? '编辑结果' : '生成结果')}
-                                                            </span>
-                                                            <span className='shrink-0'>{formatDuration(item.durationMs)}</span>
-                                                        </div>
-                                                        <p className='line-clamp-2 text-xs leading-snug text-muted-foreground'>
-                                                            {item.prompt || '未记录提示词'}
-                                                        </p>
-                                                        <div className='text-[10px] text-muted-foreground'>{formatHistoryTime(item.timestamp)}</div>
-                                                    </div>
-
-                                                    <div className='mt-2 flex items-center justify-between gap-1.5 opacity-80 transition group-hover:opacity-100'>
-                                                        <Dialog open={openPromptDialogId === itemId} onOpenChange={(o) => !o && setOpenPromptDialogId(null)}>
-                                                            <DialogTrigger asChild>
-                                                                <Button
-                                                                    type='button'
-                                                                    variant='secondary'
-                                                                    size='sm'
-                                                                    className='h-7 rounded-full px-2 text-[11px]'
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setOpenPromptDialogId(itemId);
-                                                                    }}>
-                                                                    提示词
-                                                                </Button>
-                                                            </DialogTrigger>
-                                                            <DialogContent className='sm:max-w-[625px]'>
-                                                                <DialogHeader>
-                                                                    <DialogTitle>提示词</DialogTitle>
-                                                                    <DialogDescription>用于生成这批图像的完整提示词。</DialogDescription>
-                                                                </DialogHeader>
-                                                                <div className='max-h-[400px] overflow-y-auto rounded-2xl border border-border bg-muted/40 p-4 text-sm leading-6'>
-                                                                    {item.prompt || '未记录提示词。'}
-                                                                </div>
-                                                                <DialogFooter>
-                                                                    <Button variant='outline' size='sm' onClick={() => handleCopy(item.prompt, itemId)}>
-                                                                        {copiedId === itemId ? <Check className='mr-2 h-4 w-4 text-emerald-500' /> : <Copy className='mr-2 h-4 w-4' />}
-                                                                        {copiedId === itemId ? '已复制' : '复制'}
-                                                                    </Button>
-                                                                    <DialogClose asChild>
-                                                                        <Button type='button' variant='secondary' size='sm'>关闭</Button>
-                                                                    </DialogClose>
-                                                                </DialogFooter>
-                                                            </DialogContent>
-                                                        </Dialog>
-
-                                                        {item.costDetails && (
-                                                            <Dialog open={openCostDialogId === itemId} onOpenChange={(o) => !o && setOpenCostDialogId(null)}>
-                                                                <DialogTrigger asChild>
-                                                                    <Button
-                                                                        type='button'
-                                                                        variant='secondary'
-                                                                        size='sm'
-                                                                        className='h-7 rounded-full px-2 text-[11px] text-emerald-300'
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setOpenCostDialogId(itemId);
-                                                                        }}>
-                                                                        <DollarSign size={12} />
-                                                                        {item.costDetails.estimated_cost_usd.toFixed(4)}
-                                                                    </Button>
-                                                                </DialogTrigger>
-                                                                <DialogContent className='sm:max-w-[450px]'>
-                                                                    <DialogHeader>
-                                                                        <DialogTitle>费用明细</DialogTitle>
-                                                                        <DialogDescription>此次图像生成的估计费用明细。</DialogDescription>
-                                                                    </DialogHeader>
-                                                                    {(() => {
-                                                                        const m: GptImageModel = (item.model || 'gpt-image-1') as GptImageModel;
-                                                                        const r = getModelRates(m);
-                                                                        return (
-                                                                            <div className='space-y-4 text-sm'>
-                                                                                <div className='rounded-2xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground'>
-                                                                                    <p className='font-medium text-foreground'>{m} 定价</p>
-                                                                                    <ul className='mt-2 list-disc space-y-1 pl-4'>
-                                                                                        <li>文本输入: ${r.textInputPerMillion} / 100万 tokens</li>
-                                                                                        <li>图像输入: ${r.imageInputPerMillion} / 100万 tokens</li>
-                                                                                        <li>图像输出: ${r.imageOutputPerMillion} / 100万 tokens</li>
-                                                                                    </ul>
-                                                                                </div>
-                                                                                <div className='space-y-2'>
-                                                                                    <div className='flex justify-between'><span>文本输入令牌</span><span>{item.costDetails.text_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.text_input_tokens, r.textInputPerToken)})</span></div>
-                                                                                    {item.costDetails.image_input_tokens > 0 && <div className='flex justify-between'><span>图像输入令牌</span><span>{item.costDetails.image_input_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_input_tokens, r.imageInputPerToken)})</span></div>}
-                                                                                    <div className='flex justify-between'><span>图像输出令牌</span><span>{item.costDetails.image_output_tokens.toLocaleString()} (~${calculateCost(item.costDetails.image_output_tokens, r.imageOutputPerToken)})</span></div>
-                                                                                    <div className='flex justify-between border-t border-border pt-2 font-medium'><span>估计总费用</span><span>${item.costDetails.estimated_cost_usd.toFixed(4)}</span></div>
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })()}
-                                                                    <DialogFooter>
-                                                                        <DialogClose asChild>
-                                                                            <Button type='button' variant='secondary' size='sm'>关闭</Button>
-                                                                        </DialogClose>
-                                                                    </DialogFooter>
-                                                                </DialogContent>
-                                                            </Dialog>
-                                                        )}
-
-                                                        <Dialog open={itemPendingDeleteConfirmation?.timestamp === item.timestamp} onOpenChange={(o) => { if (!o) onCancelDeletion(); }}>
-                                                            <DialogTrigger asChild>
-                                                                <Button
-                                                                    type='button'
-                                                                    variant='ghost'
-                                                                    size='icon'
-                                                                    className='h-7 w-7 rounded-full text-muted-foreground hover:text-destructive'
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        onDeleteItemRequest(item);
-                                                                    }}
-                                                                    aria-label='删除历史条目'>
-                                                                    <Trash2 size={13} />
-                                                                </Button>
-                                                            </DialogTrigger>
-                                                            <DialogContent className='sm:max-w-md'>
-                                                                <DialogHeader>
-                                                                    <DialogTitle>确认删除</DialogTitle>
-                                                                    <DialogDescription>
-                                                                        确定要删除此历史记录？将移除 {item.images.length} 张图片。此操作不可撤销。
-                                                                    </DialogDescription>
-                                                                </DialogHeader>
-                                                                <div className='flex items-center space-x-2 py-2'>
-                                                                    <Checkbox
-                                                                        id={`dont-ask-${itemId}`}
-                                                                        checked={deletePreferenceDialogValue}
-                                                                        onCheckedChange={(c) => onDeletePreferenceDialogChange(!!c)}
-                                                                    />
-                                                                    <label htmlFor={`dont-ask-${itemId}`} className='text-sm text-muted-foreground'>
-                                                                        不再询问
-                                                                    </label>
-                                                                </div>
-                                                                <DialogFooter className='gap-2 sm:justify-end'>
-                                                                    <Button type='button' variant='outline' size='sm' onClick={onCancelDeletion}>取消</Button>
-                                                                    <Button type='button' variant='destructive' size='sm' onClick={onConfirmDeletion}>删除</Button>
-                                                                </DialogFooter>
-                                                            </DialogContent>
-                                                        </Dialog>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
+                                            </article>
+                                        ))}
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </CardContent>
-        </Card>
+                            ))}
+                            {filtered.length > limit && (
+                                <div className='text-center'>
+                                    <Button
+                                        type='button'
+                                        variant='outline'
+                                        onClick={() => setLimit((current) => current + 24)}>
+                                        加载更多（还有 {filtered.length - limit} 条）
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </>
+            )}
+            <Dialog
+                open={!!detail}
+                onOpenChange={(open) => {
+                    if (!open) setDetail(null);
+                }}>
+                <DialogContent className='sm:max-w-[600px]'>
+                    <DialogHeader>
+                        <DialogTitle>创作详情</DialogTitle>
+                        <DialogDescription>
+                            {detail &&
+                                `${formatTime(detail.timestamp)} · ${detail.mode === 'edit' ? '编辑' : '生成'} ${detail.images.length} 张图片`}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {detail && (
+                        <>
+                            <p className='border-border bg-muted/25 max-h-[30dvh] overflow-y-auto rounded-xl border p-3 text-sm leading-6 break-words whitespace-pre-wrap'>
+                                {detail.prompt || '未记录提示词'}
+                            </p>
+                            <dl className='grid grid-cols-2 gap-2 text-xs'>
+                                {detail.presetTitle && (
+                                    <>
+                                        <dt className='text-muted-foreground'>使用模板</dt>
+                                        <dd>
+                                            {detail.presetCategory ? `${detail.presetCategory} · ` : ''}
+                                            {detail.presetTitle}
+                                        </dd>
+                                    </>
+                                )}
+                                <dt className='text-muted-foreground'>模型</dt>
+                                <dd className='break-all'>{detail.model}</dd>
+                                <dt className='text-muted-foreground'>尺寸</dt>
+                                <dd>
+                                    {detail.settings
+                                        ? getRequestSize(detail.settings).replace('auto', '自动').replace('x', ' × ')
+                                        : '旧记录未保存尺寸'}
+                                </dd>
+                                <dt className='text-muted-foreground'>图像质量 / 格式</dt>
+                                <dd>
+                                    {{ auto: '自动', low: '低', medium: '中', high: '高' }[detail.quality]} /{' '}
+                                    {detail.output_format?.toUpperCase() || 'PNG'}
+                                </dd>
+                                <dt className='text-muted-foreground'>处理时间</dt>
+                                <dd>{(detail.durationMs / 1000).toFixed(1)} 秒</dd>
+                            </dl>
+                            <div className='border-border space-y-2 border-t pt-3 text-xs'>
+                                <p className='font-medium'>费用与用量</p>
+                                {detail.costDetails ? (
+                                    <>
+                                        <p className='text-muted-foreground'>
+                                            文本输入 {detail.costDetails.text_input_tokens.toLocaleString()} · 图片输入{' '}
+                                            {detail.costDetails.image_input_tokens.toLocaleString()} · 图片输出{' '}
+                                            {detail.costDetails.image_output_tokens.toLocaleString()} 个令牌
+                                        </p>
+                                        <p>
+                                            估算费用 ${detail.costDetails.estimated_cost_usd.toFixed(4)}
+                                            （实际费用以服务商为准）
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className='text-muted-foreground'>
+                                        未提供用量或缺少对应模型的价格，无法估算本次费用。
+                                    </p>
+                                )}
+                            </div>
+                            {copyError && (
+                                <p role='alert' className='text-destructive text-xs'>
+                                    复制失败，请在上方选中提示词手动复制。
+                                </p>
+                            )}
+                            <DialogFooter>
+                                <Button
+                                    type='button'
+                                    variant='outline'
+                                    onClick={async () => {
+                                        try {
+                                            await navigator.clipboard.writeText(detail.prompt);
+                                            setCopied(true);
+                                            setCopyError(false);
+                                            if (copyTimer.current) clearTimeout(copyTimer.current);
+                                            copyTimer.current = setTimeout(() => setCopied(false), 2000);
+                                        } catch {
+                                            setCopyError(true);
+                                        }
+                                    }}>
+                                    {copied ? <Check className='h-4 w-4' /> : <Copy className='h-4 w-4' />}
+                                    {copied ? '已复制' : '复制提示词'}
+                                </Button>
+                                <Button
+                                    type='button'
+                                    disabled={disabled}
+                                    onClick={() => {
+                                        onRestore(detail);
+                                        setDetail(null);
+                                    }}>
+                                    <RotateCcw className='h-4 w-4' />
+                                    复用参数
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+        </section>
     );
 }
-
-export const HistoryPanel = React.memo(HistoryPanelImpl);

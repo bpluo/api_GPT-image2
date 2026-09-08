@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint src",
+    "test": "node --test tests/core.test.cjs tests/api.test.cjs tests/client.test.cjs tests/prompts.test.cjs",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""
   },
   "dependencies": {
