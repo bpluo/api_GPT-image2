@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { isSafeImageFilename, resolveImageReadPath } from '@/lib/image-storage';
 
+// Image files change with every generation; never attempt to prerender this route.
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ filename: string }> }) {
     const { filename } = await params;
 

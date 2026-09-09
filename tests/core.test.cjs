@@ -11,6 +11,13 @@ const {
     groupHistoryBySession
 } = require('../src/lib/history.ts');
 const { calculateApiCost } = require('../src/lib/cost-utils.ts');
+const {
+    activeProfile,
+    loadProfileStore,
+    normalizeStore,
+    profileCredentials,
+    saveProfileStore
+} = require('../src/lib/api-profiles.ts');
 const { createStreamingImageResponse } = require('../src/lib/image-stream.ts');
 
 const settings = (patch = {}) => ({ ...DEFAULT_IMAGE_SETTINGS, prompt: '测试画面', ...patch });
@@ -62,7 +69,7 @@ test('个人密钥和服务端配置分别解析，不混用不同服务商', ()
     });
     assert.deepEqual(resolveApiCredentials({}, server), { apiKey: 'server-key', baseUrl: 'https://server.example/v1' });
 });
-test('旧草稿损坏的参数恢复为有效默认值', () => {
+test('旧草稿损坏的参数恢复为有效默认值，动态模型名保留', () => {
     const result = normalizeImageSettings({
         model: 'missing',
         n: 500,
@@ -70,11 +77,13 @@ test('旧草稿损坏的参数恢复为有效默认值', () => {
         quality: 'impossible',
         prompt: 123
     });
-    assert.equal(result.model, 'gpt-image-2');
+    // 模型列表现在来自接口动态获取，未知模型名不再被白名单重置。
+    assert.equal(result.model, 'missing');
     assert.equal(result.n, 10);
     assert.equal(result.partial_images, 3);
     assert.equal(result.quality, 'auto');
     assert.equal(result.prompt, '');
+    assert.equal(normalizeImageSettings({ model: '   ' }).model, 'gpt-image-2');
 });
 test('切换模型、数量或格式时只保留兼容参数', () => {
     assert.equal(normalizeImageSettings(settings({ n: 2, stream: true })).stream, false);
@@ -339,4 +348,59 @@ test('尺寸中的非法输入保留并提示，不静默换成默认分辨率',
     assert.equal(invalid.customWidth, -16);
     assert.equal(invalid.customHeight, 1.5);
     assert.throws(() => buildImageFormData({ mode: 'generate', settings: invalid }), /宽度和高度/);
+});
+
+const memoryStorage = (initial = {}) => {
+    const map = new Map(Object.entries(initial));
+    return {
+        getItem: (key) => map.get(key) ?? null,
+        setItem: (key, value) => void map.set(key, value)
+    };
+};
+test('旧版单份 API 设置自动迁移为多配置存储', () => {
+    const storage = memoryStorage({
+        apiSettings: JSON.stringify({ apiKey: ' legacy-key ', baseUrl: 'https://legacy.example/v1' })
+    });
+    const store = loadProfileStore(storage);
+    assert.equal(store.profiles.length, 1);
+    assert.equal(store.profiles[0].apiKey, 'legacy-key');
+    assert.equal(store.profiles[0].baseUrl, 'https://legacy.example/v1');
+    assert.equal(store.activeId, store.profiles[0].id);
+    assert.equal(saveProfileStore(store, storage), true);
+    assert.equal(loadProfileStore(storage).profiles[0].id, store.profiles[0].id);
+});
+test('多配置的规范化：去重、截断、丢弃坏记录、修复失效的 activeId', () => {
+    const store = normalizeStore({
+        activeId: 'gone',
+        profiles: [
+            { apiKey: 'a' },
+            { id: 'dup', name: 'x'.repeat(50), baseUrl: 'https://a.example/v1', apiKey: 'a' },
+            { id: 'dup', apiKey: 'b' },
+            { apiKey: '' },
+            null,
+            { apiKey: 'c', baseUrl: 'not a url' }
+        ]
+    });
+    assert.equal(store.profiles.length, 3);
+    assert.equal(store.profiles[1].name.length, 30);
+    assert.equal(store.activeId, store.profiles[0].id);
+    assert.notEqual(store.profiles[0].id, store.profiles[2].id);
+});
+test('未选择配置时凭据为空，选择后返回该配置的密钥与地址', () => {
+    const store = normalizeStore({
+        profiles: [
+            { id: 'one', apiKey: 'key-one', baseUrl: 'https://one.example/v1' },
+            { id: 'two', apiKey: 'key-two', baseUrl: '' }
+        ]
+    });
+    assert.deepEqual(activeProfile({ ...store, activeId: 'two' }), {
+        id: 'two',
+        name: '配置 2',
+        baseUrl: '',
+        apiKey: 'key-two'
+    });
+    assert.deepEqual(profileCredentials({ ...store, activeId: 'two' }), {
+        apiKey: 'key-two',
+        baseUrl: ''
+    });
 });

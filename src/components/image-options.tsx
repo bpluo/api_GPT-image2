@@ -1,24 +1,58 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { IMAGE_MODELS, type ImageMode, type ImageSettings } from '@/lib/image-settings';
 import { getPresetDimensions, validateGptImage2Size } from '@/lib/size-utils';
-import { ChevronDown, Settings2 } from 'lucide-react';
+import { ChevronDown, Loader2, Pencil, RefreshCw, Settings2 } from 'lucide-react';
+import * as React from 'react';
 
 type Props = {
     value: ImageSettings;
     onChange: (patch: Partial<ImageSettings>) => void;
     disabled: boolean;
     mode: ImageMode;
+    availableModels: string[];
+    modelsLoading: boolean;
+    onRefreshModels: () => void;
 };
 const selectClass =
     'h-10 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 
-export function ImageOptions({ value, onChange, disabled, mode }: Props) {
+export function ImageOptions({
+    value,
+    onChange,
+    disabled,
+    mode,
+    availableModels,
+    modelsLoading,
+    onRefreshModels
+}: Props) {
     const isGptImage2 = value.model === 'gpt-image-2';
+    const [customModel, setCustomModel] = React.useState(false);
+    const [customDraft, setCustomDraft] = React.useState('');
+    // Merge curated defaults with fetched models; the currently selected model
+    // always stays in the list so switching providers doesn't reset the draft.
+    const modelOptions = React.useMemo(() => {
+        const merged = [...new Set([...availableModels, ...IMAGE_MODELS, value.model])].filter(Boolean);
+        const score = (model: string) => (/^gpt-image|^agnes-image/.test(model) ? 0 : 1);
+        return merged.sort((a, b) => score(a) - score(b) || a.localeCompare(b));
+    }, [availableModels, value.model]);
+    const leaveCustomModel = () => {
+        if (!value.model || modelOptions.includes(value.model)) setCustomModel(false);
+    };
+    React.useEffect(() => {
+        setCustomModel((current) => current && !!value.model && !modelOptions.includes(value.model));
+    }, [value.model, modelOptions]);
+    const commitCustomModel = () => {
+        const trimmed = customDraft.trim();
+        if (trimmed) onChange({ model: trimmed });
+        setCustomModel(false);
+        setCustomDraft('');
+    };
     const sizeError =
         value.size === 'custom' ? validateGptImage2Size(value.customWidth, value.customHeight) : { valid: true };
     const canStream = isGptImage2 && value.n === 1;
@@ -33,19 +67,95 @@ export function ImageOptions({ value, onChange, disabled, mode }: Props) {
         <div className='space-y-5'>
             <div className='grid grid-cols-[minmax(0,1fr)_100px] gap-3'>
                 <div className='space-y-2'>
-                    <Label htmlFor={`${mode}-model`}>模型</Label>
-                    <select
-                        id={`${mode}-model`}
-                        value={value.model}
-                        onChange={(event) => onChange({ model: event.target.value as ImageSettings['model'] })}
-                        disabled={disabled}
-                        className={selectClass}>
-                        {IMAGE_MODELS.map((model) => (
-                            <option key={model} value={model}>
-                                {model}
-                            </option>
-                        ))}
-                    </select>
+                    <div className='flex items-center justify-between'>
+                        <Label htmlFor={`${mode}-model`}>模型</Label>
+                        <button
+                            type='button'
+                            disabled={disabled || modelsLoading}
+                            onClick={onRefreshModels}
+                            className='text-muted-foreground hover:text-foreground flex items-center gap-1 rounded px-1 text-xs hover:underline disabled:opacity-50'
+                            aria-label='重新获取模型列表'>
+                            {modelsLoading ? (
+                                <Loader2 className='h-3 w-3 animate-spin' />
+                            ) : (
+                                <RefreshCw className='h-3 w-3' />
+                            )}
+                            刷新
+                        </button>
+                    </div>
+                    {customModel ? (
+                        <div className='flex gap-2'>
+                            <Input
+                                id={`${mode}-model`}
+                                type='text'
+                                spellCheck={false}
+                                autoCapitalize='none'
+                                placeholder='输入模型名，例如 gpt-image-1.5'
+                                value={customDraft}
+                                disabled={disabled}
+                                className='h-10'
+                                autoFocus
+                                onChange={(event) => setCustomDraft(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        commitCustomModel();
+                                    }
+                                    if (event.key === 'Escape') {
+                                        event.preventDefault();
+                                        setCustomModel(false);
+                                        setCustomDraft('');
+                                    }
+                                }}
+                                onBlur={leaveCustomModel}
+                            />
+                            <Button
+                                type='button'
+                                variant='outline'
+                                size='sm'
+                                className='h-10 shrink-0'
+                                // mousedown 会先让输入框失焦并卸载本按钮，导致 click 丢失；阻止焦点转移。
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={commitCustomModel}>
+                                确定
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className='relative'>
+                            <select
+                                id={`${mode}-model`}
+                                value={value.model}
+                                onChange={(event) => onChange({ model: event.target.value })}
+                                disabled={disabled}
+                                className={`${selectClass} pr-9`}>
+                                {!modelOptions.includes(value.model) && (
+                                    <option value={value.model}>{value.model}（当前）</option>
+                                )}
+                                {modelOptions.map((model) => (
+                                    <option key={model} value={model}>
+                                        {model}
+                                    </option>
+                                ))}
+                            </select>
+                            <button
+                                type='button'
+                                disabled={disabled}
+                                aria-label='手动输入模型名'
+                                title='列表中没有？手动输入模型名'
+                                onClick={() => {
+                                    setCustomDraft(value.model);
+                                    setCustomModel(true);
+                                }}
+                                className='text-muted-foreground hover:text-foreground pointer-events-auto absolute inset-y-0 right-2 flex w-6 items-center justify-center'>
+                                <Pencil className='h-3.5 w-3.5' />
+                            </button>
+                        </div>
+                    )}
+                    <p className='text-muted-foreground text-[11px] leading-4'>
+                        {availableModels.length
+                            ? `已从接口获取 ${availableModels.length} 个模型，可与内置选项混用。`
+                            : '模型列表来自内置选项；点击“刷新”从当前接口获取。'}
+                    </p>
                 </div>
                 <div className='space-y-2'>
                     <Label htmlFor={`${mode}-count`}>图片数量</Label>

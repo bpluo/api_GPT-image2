@@ -1,6 +1,6 @@
 import { ApiConfigError, resolveApiCredentials } from '@/lib/api-config';
 import type { GptImageModel } from '@/lib/cost-utils';
-import { IMAGE_MODELS, IMAGE_MIME_TYPES, MAX_EDIT_IMAGES, MAX_IMAGE_BYTES } from '@/lib/image-settings';
+import { IMAGE_MIME_TYPES, MAX_EDIT_IMAGES, MAX_IMAGE_BYTES } from '@/lib/image-settings';
 import { ensurePrimaryImageDirExists, getPrimaryImageDir } from '@/lib/image-storage';
 import { createStreamingImageResponse, type RelayStreamEvent } from '@/lib/image-stream';
 import { createRelayClient, extractRelayError, fetchImageAsBase64 } from '@/lib/relay-api';
@@ -33,8 +33,10 @@ export async function POST(request: NextRequest) {
         const prompt = typeof promptValue === 'string' ? promptValue.trim() : '';
         if (mode !== 'generate' && mode !== 'edit') return invalid('请选择生成或编辑模式。');
         if (!prompt) return invalid('提示词不能为空，请描述画面或修改内容。');
-        const model = String(form.get('model') || 'gpt-image-2') as GptImageModel;
-        if (!IMAGE_MODELS.includes(model)) return invalid('不支持此模型，请从模型列表中重新选择。');
+        const model = String(form.get('model') || 'gpt-image-2');
+        // 模型不再使用静态白名单：列表来自 /api/models 动态获取或用户手动输入。
+        // \p{L}\p{N} 覆盖中转站的中文别名（如 gpt-image-2-高质量4k）。
+        if (!/^[\p{L}\p{N}_.-]{1,100}$/u.test(model)) return invalid('模型名无效，请从模型列表中选择或填写正确的模型名。');
         const n = Number(form.get('n') || 1);
         if (!Number.isInteger(n) || n < 1 || n > 10) return invalid('每次生成的图片数量需为 1 至 10 张。');
         const quality = String(form.get('quality') || 'auto') as 'auto' | 'low' | 'medium' | 'high';
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
             if (outputFormat !== 'png' && (!Number.isInteger(compression) || compression < 0 || compression > 100))
                 return invalid('压缩质量需为 0 至 100。');
             params = {
-                model,
+                model: model as GptImageModel,
                 prompt,
                 n,
                 size: size as OpenAI.Images.ImageGenerateParams['size'],
@@ -110,7 +112,7 @@ export async function POST(request: NextRequest) {
             )
                 return invalid('遮罩需为有效的 PNG 图片，且小于 50 MB。');
             params = {
-                model,
+                model: model as GptImageModel,
                 prompt,
                 n,
                 image: imageFiles,

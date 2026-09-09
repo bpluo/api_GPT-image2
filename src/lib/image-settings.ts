@@ -1,6 +1,8 @@
 import type { GptImageModel } from './cost-utils';
 import { getPresetDimensions, validateGptImage2Size, type SizePreset } from './size-utils';
 
+// Curated defaults shown before a provider's model list is fetched; the picker
+// merges these with models returned by /api/models and any manually typed value.
 export const IMAGE_MODELS: GptImageModel[] = [
     'gpt-image-2',
     'gpt-image-2-高质量4k',
@@ -52,7 +54,7 @@ export function normalizeImageSettings(raw: unknown): ImageSettings {
     const input = raw && typeof raw === 'object' ? (raw as Partial<ImageSettings>) : {};
     const value = { ...DEFAULT_IMAGE_SETTINGS };
     if (typeof input.prompt === 'string') value.prompt = input.prompt;
-    if (IMAGE_MODELS.includes(input.model as GptImageModel)) value.model = input.model!;
+    if (typeof input.model === 'string' && input.model.trim()) value.model = input.model.trim();
     if (['auto', 'custom', 'square', 'landscape', 'portrait'].includes(input.size || '')) value.size = input.size!;
     if (['auto', 'low', 'medium', 'high'].includes(input.quality || '')) value.quality = input.quality!;
     if (['png', 'jpeg', 'webp'].includes(input.output_format || '')) value.output_format = input.output_format!;

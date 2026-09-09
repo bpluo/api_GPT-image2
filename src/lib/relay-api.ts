@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 
 // Some relay stations sit behind Cloudflare WAF rules that block the OpenAI SDK's
 // default User-Agent, so we present a browser UA instead.
-const BROWSER_USER_AGENT =
+export const BROWSER_USER_AGENT =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // Relay stations expect the standard OpenAI path prefix, but users often paste a bare

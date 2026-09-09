@@ -20,6 +20,15 @@ import {
 import { useHistoryStore } from '@/hooks/use-history-store';
 import { useImageJob } from '@/hooks/use-image-job';
 import { useWorkspaceDraft } from '@/hooks/use-workspace-draft';
+import {
+    activeProfile,
+    fetchModelList,
+    hostLabel,
+    loadProfileStore,
+    profileCredentials as profileCredentialsOf,
+    saveProfileStore,
+    type ApiProfile
+} from '@/lib/api-profiles';
 import { deleteHistoryFiles, loadHistoryImages, persistImageResult, type DisplayImage } from '@/lib/client-images';
 import { calculateApiCost } from '@/lib/cost-utils';
 import { applyHistoryDeletion, type HistoryMetadata } from '@/lib/history';
@@ -54,7 +63,17 @@ export default function HomePage() {
     const [auth, setAuth] = React.useState<AuthStatus | null>(null);
     const [authError, setAuthError] = React.useState(false);
     const [settingsReady, setSettingsReady] = React.useState(false);
-    const [apiSettings, setApiSettings] = React.useState({ baseUrl: '', apiKey: '' });
+    const [profileStore, setProfileStore] = React.useState<{
+        version: 1;
+        profiles: ApiProfile[];
+        activeId: string | null;
+    }>({ version: 1, profiles: [], activeId: null });
+    const [profileStorageError, setProfileStorageError] = React.useState(false);
+    const [availableModels, setAvailableModels] = React.useState<string[]>([]);
+    const [modelsLoading, setModelsLoading] = React.useState(false);
+    const [modelStatus, setModelStatus] = React.useState<{ loading: boolean; models: string[]; error: string | null } | null>(
+        null
+    );
     const [passwordHash, setPasswordHash] = React.useState<string | null>(null);
     const [apiOpen, setApiOpen] = React.useState(false);
     const [passwordOpen, setPasswordOpen] = React.useState(false);
@@ -102,14 +121,9 @@ export default function HomePage() {
     }, [fetchAuth]);
     React.useEffect(() => {
         try {
-            const raw = localStorage.getItem('apiSettings');
-            if (raw) {
-                const saved = JSON.parse(raw);
-                setApiSettings({
-                    baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : '',
-                    apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : ''
-                });
-            }
+            const store = loadProfileStore();
+            setProfileStore(store);
+            if (!store.profiles.length && localStorage.getItem('apiSettings')) setProfileStorageError(true);
             setPasswordHash(localStorage.getItem('clientPasswordHash'));
             setSkipConfirmation(localStorage.getItem('imageGenSkipDeleteConfirm') === 'true');
         } catch {
@@ -146,16 +160,16 @@ export default function HomePage() {
     };
     const showResults = () =>
         document.getElementById('results')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    const credentials = (override?: ApiCredentials): ApiCredentials => ({ ...apiSettings, passwordHash, ...override });
+    const profileCredentials = React.useMemo(() => profileCredentialsOf(profileStore), [profileStore]);
+    const credentials = (override?: ApiCredentials): ApiCredentials => ({
+        ...profileCredentials,
+        passwordHash,
+        ...override
+    });
     const apiLabel = (() => {
+        const profile = activeProfile(profileStore);
         if (!auth) return authError ? '连接异常' : '检查配置中';
-        if (apiSettings.apiKey) {
-            try {
-                return apiSettings.baseUrl ? new URL(apiSettings.baseUrl).host : 'OpenAI 官方接口';
-            } catch {
-                return '需要检查接口地址';
-            }
-        }
+        if (profile) return profile.name || hostLabel(profile.baseUrl);
         return auth.hasServerKey ? '服务端已配置' : '设置 API 后开始';
     })();
 
@@ -392,17 +406,58 @@ export default function HomePage() {
         if (action?.type === 'request') void runRequest(action.request, override);
         else if (action?.type === 'delete') void executeDeletion(action.items, override);
     };
-    const saveApiSettings = (baseUrl: string, apiKey: string) => {
-        const next = { baseUrl, apiKey };
-        setApiSettings(next);
-        setApiOpen(false);
-        try {
-            localStorage.setItem('apiSettings', JSON.stringify(next));
-        } catch {
-            setNotice('设置已用于当前页面，但浏览器未能保存，刷新后需重新填写。');
-        }
-        resumePending(next);
+    const saveProfileStoreState = (profiles: ApiProfile[], activeId: string | null) => {
+        const next = { version: 1 as const, activeId, profiles };
+        setProfileStore(next);
+        const persisted = saveProfileStore(next);
+        if (!persisted) setNotice('配置已用于当前页面，但浏览器未能保存，刷新后需重新填写。');
+        // 与旧版单配置行为一致：保存后自动继续刚才因缺少密钥而挂起的操作。
+        if (activeId && profiles.some((profile) => profile.id === activeId))
+            resumePending(profileCredentialsOf(next));
     };
+    const testModels = async (profile: Pick<ApiProfile, 'apiKey' | 'baseUrl'>) => {
+        setModelStatus({ loading: true, models: [], error: null });
+        try {
+            const models = await fetchModelList({ apiKey: profile.apiKey, baseUrl: profile.baseUrl });
+            setModelStatus({ loading: false, models, error: null });
+            return models;
+        } catch (cause) {
+            const message = cause instanceof Error ? cause.message : '模型列表获取失败，请重试。';
+            setModelStatus({ loading: false, models: [], error: message });
+            throw cause;
+        }
+    };
+    const fetchingModels = React.useRef(false);
+    const fetchedModelsKey = React.useRef<string | null>(null);
+    const refreshModels = React.useCallback(async () => {
+        if (fetchingModels.current) return;
+        const creds = profileCredentialsOf(profileStore);
+        if (!creds.apiKey && !auth?.hasServerKey) {
+            setActionError('请先在 API 设置中添加配置，再获取模型列表。');
+            setApiOpen(true);
+            return;
+        }
+        fetchingModels.current = true;
+        setModelsLoading(true);
+        try {
+            const models = await fetchModelList(creds);
+            setAvailableModels(models);
+        } catch {
+            setAvailableModels([]);
+        } finally {
+            fetchingModels.current = false;
+            setModelsLoading(false);
+        }
+    }, [profileStore, auth]);
+    // 自动获取一次模型列表：按凭据指纹去重，避免失败后无限重试。
+    React.useEffect(() => {
+        if (!ready) return;
+        const creds = profileCredentialsOf(profileStore);
+        const key = creds.apiKey ? `${creds.baseUrl}|${creds.apiKey.slice(-8)}` : auth?.hasServerKey ? 'server' : null;
+        if (!key || fetchedModelsKey.current === key) return;
+        fetchedModelsKey.current = key;
+        void refreshModels();
+    }, [ready, profileStore, auth, refreshModels]);
     const savePassword = async (password: string) => {
         if (!globalThis.crypto?.subtle)
             throw new Error('当前浏览器无法验证密码，请通过 HTTPS 或 localhost 访问工作台。');
@@ -419,7 +474,10 @@ export default function HomePage() {
     };
 
     const errorText = actionError || job.error?.message;
-    const storageWarning = historyStore.storageError || draftError;
+    const storageWarning =
+        historyStore.storageError ||
+        draftError ||
+        (profileStorageError ? '浏览器中的旧版 API 设置未能迁移，请重新添加配置。' : null);
     React.useEffect(() => {
         if (errorText && !apiOpen && !passwordOpen && window.matchMedia('(max-width: 1023px)').matches) {
             const alert = document.getElementById('workspace-error');
@@ -482,7 +540,7 @@ export default function HomePage() {
                         </Button>
                     </div>
                 )}
-                {ready && !auth?.hasServerKey && !apiSettings.apiKey && (
+                {ready && !auth?.hasServerKey && !profileCredentials.apiKey && (
                     <div className='border-primary/30 bg-primary/5 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3'>
                         <KeyRound className='text-primary h-5 w-5' />
                         <div className='min-w-0 flex-1'>
@@ -584,6 +642,9 @@ export default function HomePage() {
                                 onSubmit={submit}
                                 disabled={busy || !draftReady || !settingsReady || (!auth && !authError)}
                                 isLoading={job.isRunning}
+                                availableModels={availableModels}
+                                modelsLoading={modelsLoading}
+                                onRefreshModels={() => void refreshModels()}
                                 onPresetSelect={(preset) => {
                                     presets.current.generate = preset;
                                 }}
@@ -599,6 +660,9 @@ export default function HomePage() {
                                 onSubmit={submit}
                                 disabled={busy || !draftReady || !settingsReady || (!auth && !authError)}
                                 isLoading={job.isRunning}
+                                availableModels={availableModels}
+                                modelsLoading={modelsLoading}
+                                onRefreshModels={() => void refreshModels()}
                                 active={draft.mode === 'edit'}
                                 onPresetSelect={(preset) => {
                                     presets.current.edit = preset;
@@ -662,11 +726,16 @@ export default function HomePage() {
             </div>
             <ApiSettingsDialog
                 isOpen={apiOpen}
-                onOpenChange={setApiOpen}
-                baseUrl={apiSettings.baseUrl}
-                apiKey={apiSettings.apiKey}
+                onOpenChange={(open) => {
+                    setApiOpen(open);
+                    if (!open) setModelStatus(null);
+                }}
+                profiles={profileStore.profiles}
+                activeId={profileStore.activeId}
                 hasServerKey={!!auth?.hasServerKey}
-                onSave={saveApiSettings}
+                onSaveStore={saveProfileStoreState}
+                onTestModels={testModels}
+                modelStatus={modelStatus}
             />
             <PasswordDialog
                 isOpen={passwordOpen}
