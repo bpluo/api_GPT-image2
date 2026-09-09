@@ -263,7 +263,7 @@ node tests/fixture-server.cjs
 <p align="center"><img src="./readme-images/cost-breakdown.jpg" alt="旧版费用详情" width="420" /></p>
 
 </details>
-<a href="www.dreamfield.top">
+<a href="www.dreamfield.top"></a>
 ## 反馈与许可
 
 使用问题和改进建议可提交至 [GitHub Issues](https://github.com/bpluo/api_GPT-image2/issues)。项目采用 [MIT 许可证](LICENSE)。
