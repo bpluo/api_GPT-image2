@@ -16,7 +16,10 @@ export function GenerationForm({
     onSubmit,
     disabled,
     isLoading,
-    onPresetSelect
+    onPresetSelect,
+    availableModels,
+    modelsLoading,
+    onRefreshModels
 }: {
     value: ImageSettings;
     onChange: (patch: Partial<ImageSettings>) => void;
@@ -24,6 +27,9 @@ export function GenerationForm({
     disabled: boolean;
     isLoading: boolean;
     onPresetSelect?: (preset: PromptTemplate | null) => void;
+    availableModels: string[];
+    modelsLoading: boolean;
+    onRefreshModels: () => void;
 }) {
     const invalid = validateSettings(value);
     return (
@@ -42,7 +48,15 @@ export function GenerationForm({
                     disabled={disabled}
                     onPresetSelect={onPresetSelect}
                 />
-                <ImageOptions mode='generate' value={value} onChange={onChange} disabled={disabled} />
+                <ImageOptions
+                    mode='generate'
+                    value={value}
+                    onChange={onChange}
+                    disabled={disabled}
+                    availableModels={availableModels}
+                    modelsLoading={modelsLoading}
+                    onRefreshModels={onRefreshModels}
+                />
             </div>
             <div className='border-border bg-card shrink-0 space-y-2 border-t p-4 sm:px-5'>
                 <Button

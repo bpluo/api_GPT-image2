@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { NextRequest } = require('next/server');
 const { POST: imagesPost } = require('../src/app/api/images/route.ts');
+const { GET: modelsGet } = require('../src/app/api/models/route.ts');
 const { POST: deletePost } = require('../src/app/api/image-delete/route.ts');
 const { GET: authGet } = require('../src/app/api/auth-status/route.ts');
 const { consumeImageStream } = require('../src/lib/image-request.ts');
@@ -87,13 +88,35 @@ test('无效模式、空白提示词、图片数量和尺寸不调用上游', as
         { prompt: '  ' },
         { n: 'NaN' },
         { n: '11' },
-        { model: 'bad-model' },
+        { model: 'bad model!' },
         { size: '100x100' },
         { stream: 'true', n: '2' },
         { mode: 'edit' }
     ])
         assert.equal((await imagesPost(request(payload(patch)))).status, 400);
     assert.equal(calls, 0);
+});
+test('动态模型名不再被白名单拒绝，直接转发到上游', async (t) => {
+    let upstreamModel = null;
+    t.mock.method(global, 'fetch', async (url, init) => {
+        const body = JSON.parse(String(init.body));
+        upstreamModel = body.model;
+        return response({ data: [{ b64_json: 'YWJj' }] });
+    });
+    const result = await imagesPost(request(payload({ model: 'agnes-image-9-pro' })));
+    assert.equal(result.status, 200);
+    assert.equal(upstreamModel, 'agnes-image-9-pro');
+});
+test('中文模型别名（中转站 4K 变体）能通过校验转发', async (t) => {
+    let upstreamModel = null;
+    t.mock.method(global, 'fetch', async (url, init) => {
+        const body = JSON.parse(String(init.body));
+        upstreamModel = body.model;
+        return response({ data: [{ b64_json: 'YWJj' }] });
+    });
+    const result = await imagesPost(request(payload({ model: 'gpt-image-2-高质量4k' })));
+    assert.equal(result.status, 200);
+    assert.equal(upstreamModel, 'gpt-image-2-高质量4k');
 });
 test('个人凭据仅发往个人配置的接口，成功结果携带存储位置', async (t) => {
     t.mock.method(global, 'fetch', async (url, init) => {
@@ -187,4 +210,50 @@ test('批量返回不完整时保留已生成的图片，而不是丢弃整批�
     assert.equal(result.status, 200);
     assert.equal(data.images.length, 1);
     assert.match(data.warning, /1/);
+});
+
+test('模型列表接口请求上游 /models 并返回 id 列表', async (t) => {
+    let requested = '';
+    t.mock.method(global, 'fetch', async (url, init) => {
+        requested = String(url);
+        assert.equal(new Headers(init.headers).get('authorization'), 'Bearer server-test-secret');
+        return response({ data: [{ id: 'gpt-image-2' }, { id: 'agnes-image-2.5-flash' }, { id: 'gpt-5' }] });
+    });
+    const result = await modelsGet(new NextRequest('http://localhost/api/models'));
+    const data = await result.json();
+    assert.equal(result.status, 200);
+    assert.match(requested, /^https:\/\/server\.example\/v1\/models$/);
+    assert.deepEqual(data.models, ['gpt-image-2', 'agnes-image-2.5-flash', 'gpt-5']);
+});
+test('模型列表接口不支持 /models 时返回内置选项，密钥错误如实上报', async (t) => {
+    t.mock.method(global, 'fetch', async () => response({}, 404));
+    const fallback = await modelsGet(new NextRequest('http://localhost/api/models'));
+    assert.equal((await fallback.json()).source, 'fallback');
+    t.mock.method(global, 'fetch', async () => response({}, 401));
+    const rejected = await modelsGet(new NextRequest('http://localhost/api/models'));
+    assert.equal(rejected.status, 401);
+    assert.equal((await rejected.json()).code, 'UPSTREAM_AUTH_ERROR');
+});
+test('模型列表接口返回 HTML 时给出地址错误提示', async (t) => {
+    t.mock.method(
+        global,
+        'fetch',
+        async () => new Response('<html>login page</html>', { status: 200, headers: { 'content-type': 'text/html' } })
+    );
+    const result = await modelsGet(new NextRequest('http://localhost/api/models'));
+    assert.equal(result.status, 502);
+    assert.match((await result.json()).error, /接口地址/);
+});
+test('调用者地址不能借用服务端密钥获取模型列表', async (t) => {
+    let calls = 0;
+    t.mock.method(global, 'fetch', async () => {
+        calls++;
+        throw new Error('不应访问网络');
+    });
+    const result = await modelsGet(
+        new NextRequest('http://localhost/api/models', { headers: { 'x-base-url': 'https://untrusted.example' } })
+    );
+    assert.equal(result.status, 400);
+    assert.equal((await result.json()).code, 'API_CONFIG_ERROR');
+    assert.equal(calls, 0);
 });

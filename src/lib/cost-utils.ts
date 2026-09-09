@@ -35,6 +35,8 @@ const GPT_IMAGE_2_IMAGE_OUTPUT_COST_PER_TOKEN = 0.00003; // $30.00/1M
 
 // gpt-image-1/2 series plus relay-station models (pie-xian's agnes series, gwlink's 4K variant).
 // Relay models fall back to gpt-image-1 rates below — actual billing is decided by the station.
+// Unknown relay models are allowed (fetched dynamically from the provider's /models
+// endpoint or typed manually); cost estimation is simply skipped for them.
 export type GptImageModel =
     | 'gpt-image-1'
     | 'gpt-image-1-mini'
@@ -42,7 +44,8 @@ export type GptImageModel =
     | 'gpt-image-2'
     | 'gpt-image-2-高质量4k'
     | 'agnes-image-2.5-flash'
-    | 'agnes-image-2.1-flash';
+    | 'agnes-image-2.1-flash'
+    | (string & {});
 
 export type ModelRates = {
     textInputPerToken: number;

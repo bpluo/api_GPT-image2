@@ -25,7 +25,10 @@ export function EditingForm({
     disabled,
     isLoading,
     active,
-    onPresetSelect
+    onPresetSelect,
+    availableModels,
+    modelsLoading,
+    onRefreshModels
 }: {
     value: ImageSettings;
     onChange: (patch: Partial<ImageSettings>) => void;
@@ -37,6 +40,9 @@ export function EditingForm({
     isLoading: boolean;
     active: boolean;
     onPresetSelect?: (preset: PromptTemplate | null) => void;
+    availableModels: string[];
+    modelsLoading: boolean;
+    onRefreshModels: () => void;
 }) {
     const previews = useFilePreviews(files);
     const [dragging, setDragging] = React.useState(false);
@@ -199,7 +205,15 @@ export function EditingForm({
                     onPresetSelect={onPresetSelect}
                 />
                 {firstUrl && <MaskEditor key={firstUrl} ref={mask} sourceUrl={firstUrl} disabled={locked} />}
-                <ImageOptions mode='edit' value={value} onChange={onChange} disabled={locked} />
+                <ImageOptions
+                    mode='edit'
+                    value={value}
+                    onChange={onChange}
+                    disabled={locked}
+                    availableModels={availableModels}
+                    modelsLoading={modelsLoading}
+                    onRefreshModels={onRefreshModels}
+                />
                 {error && (
                     <p role='alert' className='text-destructive text-sm'>
                         {error}
