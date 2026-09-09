@@ -17,7 +17,6 @@
     <img src="https://www.dreamfield.top/dream-field/contest-readme/assets/dreamseed-readme-banner.png" alt="DreamSeed 种梦计划参赛作品" width="100%" />
   </a>
 </p>
-https://vsllm.com
 <p align="right"><a href="./README_EN.md">英文旧版说明</a></p>
  https://vsllm.com
 
