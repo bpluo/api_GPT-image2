@@ -64,7 +64,7 @@ npm run dev
 
 可以选择以下任意一种方式，也可以两者并存（未选择个人配置时自动使用服务端配置）。
 
-<p align="center"><img src="./readme-images/apikey.png" alt="api在线配置" width="800" /></p>
+<p align="center"><img src="./readme-images/apikey.png" alt="api在线配置" width="500" /></p>
 
 **在页面配置个人接口**：点击右上角的 **API 设置**：
 
@@ -105,7 +105,7 @@ OPENAI_API_BASE_URL=https://api.openai.com/v1
 | 界面视觉稿 | 移动端仪表盘、产品介绍页                                           |
 | 图片修改   | 换背景、移除清理、风格配色、定点改字、延展画面                     |
 
-<p align="center"><img src="./readme-images/mod.png" alt="旧版主界面" width="800" /></p>
+<p align="center"><img src="./readme-images/mod.png" alt="模板主界面" width="750" /></p>
 
 **完整模板**：选择场景，填写必填内容，检查实时预览，再点击 **填入提示词**。选填项可留空；示例只补空白项，保留已经输入的材料。生成模板可设置说明性标签语言，编辑模板默认保留原图语言。
 
@@ -131,7 +131,7 @@ OPENAI_API_BASE_URL=https://api.openai.com/v1
 
 原图、笔画和模板弹窗中尚未应用的填写内容仅保留在当前页面。刷新后需要重新添加素材；已经填入工作台的提示词与参数会自动保存。
 
-<p align="center"><img src="./readme-images/mask.png" alt="遮罩示例" width="800" /></p>
+<p align="center"><img src="./readme-images/mask.png" alt="遮罩示例" width="450" /></p>
 
 ### 等待、取消与部分成功
 
